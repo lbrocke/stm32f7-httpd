@@ -23,6 +23,7 @@ use stm32f7_discovery::println;
 use stm32f7_discovery::system_clock::{self, Hz};
 
 mod httpd;
+use httpd::HTTPD;
 
 const SYSTICK: Hz = Hz(20);
 
@@ -89,7 +90,7 @@ fn main() -> ! {
 
     unsafe { ALLOCATOR.init(cortex_m_rt::heap_start() as usize, HEAP_SIZE) }
 
-    let mut server = httpd::init(
+    let mut server = HTTPD::new(
         &mut rcc,
         &mut syscfg,
         &mut ethernet_mac,

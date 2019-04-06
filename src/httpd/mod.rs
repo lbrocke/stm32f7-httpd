@@ -15,6 +15,47 @@ pub struct HTTPD<'a> {
 }
 
 impl<'a> HTTPD<'a> {
+    pub fn new<'b>(
+        rcc: &mut RCC,
+        syscfg: &mut SYSCFG,
+        ethernet_mac: &mut ETHERNET_MAC,
+        ethernet_dma: &'b mut ETHERNET_DMA,
+        ethernet_addr: EthernetAddress,
+        ip_addr: Ipv4Address,
+        port: u16,
+    ) -> Result<HTTPD<'b>, PhyError> {
+        let ethernet_interface = ethernet::EthernetDevice::new(
+            Default::default(),
+            Default::default(),
+            rcc,
+            syscfg,
+            ethernet_mac,
+            ethernet_dma,
+            ethernet_addr,
+        )
+        .map(|device| device.into_interface());
+
+        if let Err(e) = ethernet_interface {
+            return Err(e);
+        }
+
+        let mut sockets = SocketSet::new(Vec::new());
+
+        let endpoint = IpEndpoint::new(IpAddress::Ipv4(ip_addr), port);
+
+        let tcp_rx_buffer = TcpSocketBuffer::new(vec![0; ethernet::MTU]);
+        let tcp_tx_buffer = TcpSocketBuffer::new(vec![0; ethernet::MTU]);
+
+        let mut tcp_socket = TcpSocket::new(tcp_rx_buffer, tcp_tx_buffer);
+        tcp_socket.listen(endpoint).unwrap();
+        sockets.add(tcp_socket);
+
+        Ok(HTTPD {
+            ethernet_interface: ethernet_interface.unwrap(),
+            sockets: sockets,
+        })
+    }
+
     pub fn poll(&mut self) {
         let timestamp = Instant::from_millis(system_clock::ms() as i64);
 
@@ -46,43 +87,3 @@ impl<'a> HTTPD<'a> {
     }
 }
 
-pub fn init<'a>(
-    rcc: &mut RCC,
-    syscfg: &mut SYSCFG,
-    ethernet_mac: &mut ETHERNET_MAC,
-    ethernet_dma: &'a mut ETHERNET_DMA,
-    ethernet_addr: EthernetAddress,
-    ip_addr: Ipv4Address,
-    port: u16,
-) -> Result<HTTPD<'a>, PhyError> {
-    let ethernet_interface = ethernet::EthernetDevice::new(
-        Default::default(),
-        Default::default(),
-        rcc,
-        syscfg,
-        ethernet_mac,
-        ethernet_dma,
-        ethernet_addr,
-    )
-    .map(|device| device.into_interface());
-
-    if let Err(e) = ethernet_interface {
-        return Err(e);
-    }
-
-    let mut sockets = SocketSet::new(Vec::new());
-
-    let endpoint = IpEndpoint::new(IpAddress::Ipv4(ip_addr), port);
-
-    let tcp_rx_buffer = TcpSocketBuffer::new(vec![0; ethernet::MTU]);
-    let tcp_tx_buffer = TcpSocketBuffer::new(vec![0; ethernet::MTU]);
-
-    let mut tcp_socket = TcpSocket::new(tcp_rx_buffer, tcp_tx_buffer);
-    tcp_socket.listen(endpoint).unwrap();
-    sockets.add(tcp_socket);
-
-    Ok(HTTPD {
-        ethernet_interface: ethernet_interface.unwrap(),
-        sockets: sockets,
-    })
-}
