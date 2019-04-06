@@ -105,6 +105,8 @@ impl<'a> HTTPD<'a> {
 
             if data.len() > 0 {
                 println!("Received {:?}", data);
+
+                socket.send_slice(&data).unwrap();
             }
         } else if socket.may_send() {
             println!("Closing socket");
