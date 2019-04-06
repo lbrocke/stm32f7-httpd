@@ -13,7 +13,7 @@ use alloc_cortex_m::CortexMHeap;
 use core::alloc::Layout as AllocLayout;
 use core::panic::PanicInfo;
 use cortex_m_rt::{entry, exception};
-use smoltcp::wire::{EthernetAddress, Ipv4Address};
+use smoltcp::wire::{EthernetAddress, IpAddress};
 use stm32f7::stm32f7x6::{CorePeripherals, Peripherals};
 use stm32f7_discovery::gpio::{GpioPort, OutputPin};
 use stm32f7_discovery::init;
@@ -28,10 +28,6 @@ use httpd::HTTPD;
 const SYSTICK: Hz = Hz(20);
 
 const HEAP_SIZE: usize = 50 * 1024;
-
-const ETH_ADDR: EthernetAddress = EthernetAddress([0x00, 0x08, 0xdc, 0xab, 0xcd, 0xef]);
-const IP_ADDR: Ipv4Address = Ipv4Address([192, 168, 0, 100]);
-const PORT: u16 = 8000;
 
 #[entry]
 fn main() -> ! {
@@ -95,10 +91,10 @@ fn main() -> ! {
         &mut syscfg,
         &mut ethernet_mac,
         &mut ethernet_dma,
-        ETH_ADDR,
-        IP_ADDR,
-        PORT,
-    ).unwrap();
+        EthernetAddress([0x00, 0x08, 0xdc, 0xab, 0xcd, 0xef]),
+        IpAddress::v4(192, 168, 0, 100),
+        6969
+    ).expect("HTTPD initialisation failed");
 
     // set up routes
 /*  server.routes(|request, mut response| {
@@ -125,6 +121,7 @@ static ALLOCATOR: CortexMHeap = CortexMHeap::empty();
 
 #[alloc_error_handler]
 fn oom_handler(_: AllocLayout) -> ! {
+    println!("I have no memory of this");
     loop {}
 }
 
@@ -135,6 +132,6 @@ fn SysTick() {
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    println!("{:?}", _info);
+    println!("Don't panic: {:?}", _info);
     loop {}
 }

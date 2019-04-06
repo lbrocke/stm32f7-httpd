@@ -1,10 +1,17 @@
 //! HTTP Server Module
 
-use alloc::vec::Vec;
-use smoltcp::iface::EthernetInterface;
+use alloc::{
+    borrow::ToOwned,
+    collections::BTreeMap
+};
+use smoltcp::iface::{
+    EthernetInterface,
+    EthernetInterfaceBuilder,
+    NeighborCache
+};
 use smoltcp::time::Instant;
-use smoltcp::socket::{Socket, SocketSet, TcpSocket, TcpSocketBuffer};
-use smoltcp::wire::{EthernetAddress, IpAddress, IpEndpoint, Ipv4Address};
+use smoltcp::socket::{SocketSet, TcpSocket, TcpSocketBuffer, SocketHandle};
+use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr};
 use stm32f7::stm32f7x6::{ETHERNET_DMA, ETHERNET_MAC, RCC, SYSCFG};
 use stm32f7_discovery::{self, print, println, system_clock};
 use stm32f7_discovery::ethernet::{self, PhyError};
@@ -12,6 +19,9 @@ use stm32f7_discovery::ethernet::{self, PhyError};
 pub struct HTTPD<'a> {
     ethernet_interface: EthernetInterface<'static, 'static, 'static, ethernet::EthernetDevice<'a>>,
     sockets: SocketSet<'static, 'static, 'static>,
+    tcp_handle: SocketHandle,
+    port: u16,
+    connected: bool
 }
 
 impl<'a> HTTPD<'a> {
@@ -21,10 +31,10 @@ impl<'a> HTTPD<'a> {
         ethernet_mac: &mut ETHERNET_MAC,
         ethernet_dma: &'b mut ETHERNET_DMA,
         ethernet_addr: EthernetAddress,
-        ip_addr: Ipv4Address,
+        ip_addr: IpAddress,
         port: u16,
     ) -> Result<HTTPD<'b>, PhyError> {
-        let ethernet_interface = ethernet::EthernetDevice::new(
+        ethernet::EthernetDevice::new(
             Default::default(),
             Default::default(),
             rcc,
@@ -32,27 +42,33 @@ impl<'a> HTTPD<'a> {
             ethernet_mac,
             ethernet_dma,
             ethernet_addr,
-        )
-        .map(|device| device.into_interface());
+        ).map(|ethernet_device| {
+            let ip_addresses = [IpCidr::new(ip_addr, 24)];
 
-        if let Err(e) = ethernet_interface {
-            return Err(e);
-        }
+            // TODO: replace with ethernet::MTU
+            let tcp_receive_buffer = TcpSocketBuffer::new(vec![64]);
+            let tcp_send_buffer = TcpSocketBuffer::new(vec![128]);
+            let tcp_socket = TcpSocket::new(tcp_receive_buffer, tcp_send_buffer);
 
-        let mut sockets = SocketSet::new(Vec::new());
+            // ARP cache of MAC address => IP address mappings
+            let neighbor_cache = NeighborCache::new(BTreeMap::new());
 
-        let endpoint = IpEndpoint::new(IpAddress::Ipv4(ip_addr), port);
+            let ethernet_interface = EthernetInterfaceBuilder::new(ethernet_device)
+                .ethernet_addr(ethernet_addr)
+                .neighbor_cache(neighbor_cache)
+                .ip_addrs(ip_addresses)
+                .finalize();
 
-        let tcp_rx_buffer = TcpSocketBuffer::new(vec![0; ethernet::MTU]);
-        let tcp_tx_buffer = TcpSocketBuffer::new(vec![0; ethernet::MTU]);
+            let mut sockets = SocketSet::new(vec![]);
+            let tcp_handle = sockets.add(tcp_socket);
 
-        let mut tcp_socket = TcpSocket::new(tcp_rx_buffer, tcp_tx_buffer);
-        tcp_socket.listen(endpoint).unwrap();
-        sockets.add(tcp_socket);
-
-        Ok(HTTPD {
-            ethernet_interface: ethernet_interface.unwrap(),
-            sockets: sockets,
+            HTTPD {
+                ethernet_interface,
+                sockets,
+                tcp_handle,
+                port,
+                connected: false
+            }
         })
     }
 
@@ -60,29 +76,42 @@ impl<'a> HTTPD<'a> {
         let timestamp = Instant::from_millis(system_clock::ms() as i64);
 
         match self.ethernet_interface.poll(&mut self.sockets, timestamp) {
-            Err(::smoltcp::Error::Exhausted) => println!("Exhausted"),
-            Err(::smoltcp::Error::Unrecognized) => println!("Unrecongnized"),
-            Err(e) => println!("Error: {:?}", e),
-            Ok(changed) => {
-                if !changed {
-                    return
-                }
+            Ok(_) => {}
+            Err(e) => {
+                println!("polling error: {}", e);
+            }
+        }
 
-                for mut socket in self.sockets.iter_mut() {
-                    println!("polling socket...");
+        let mut socket = self.sockets.get::<TcpSocket>(self.tcp_handle);
 
-                    match *socket {
-                        Socket::Tcp(ref mut socket) => {
-                            if !socket.can_recv() {
-                                println!("socket cannot receive");
-                            }
+        if !socket.is_open() {
+            socket.listen(self.port).expect("Could not listen");
+            println!("Listening...");
+        }
 
-                            println!("receiving data...");
-                        },
-                        _ => {}
-                    }
-                }
-            },
+        // Socket becomes active
+        if !self.connected && socket.is_active() {
+            println!("Connection established");
+        }
+        // Socket becomes inactive
+        if self.connected && !socket.is_active() {
+            println!("Connection closed");
+        }
+        self.connected = socket.is_active();
+
+        if socket.may_recv() {
+            let data = socket
+                .recv(|recv_buffer| (recv_buffer.len(), recv_buffer.to_owned()))
+                .unwrap();
+
+            if data.len() > 0 {
+                println!("Received {:?}", data);
+            } else {
+                println!("No chonk for me");
+            }
+        } else if socket.may_send() {
+            println!("Closing socket");
+            socket.close();
         }
     }
 }
