@@ -45,9 +45,8 @@ impl<'a> HTTPD<'a> {
         ).map(|ethernet_device| {
             let ip_addresses = [IpCidr::new(ip_addr, 24)];
 
-            // TODO: replace with ethernet::MTU
-            let tcp_receive_buffer = TcpSocketBuffer::new(vec![64]);
-            let tcp_send_buffer = TcpSocketBuffer::new(vec![128]);
+            let tcp_receive_buffer = TcpSocketBuffer::new(vec![0; ethernet::MTU]);
+            let tcp_send_buffer = TcpSocketBuffer::new(vec![0; ethernet::MTU]);
             let tcp_socket = TcpSocket::new(tcp_receive_buffer, tcp_send_buffer);
 
             // ARP cache of MAC address => IP address mappings
