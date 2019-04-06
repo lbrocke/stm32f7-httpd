@@ -92,7 +92,7 @@ fn main() -> ! {
         &mut ethernet_mac,
         &mut ethernet_dma,
         EthernetAddress([0x00, 0x08, 0xdc, 0xab, 0xcd, 0xef]),
-        IpAddress::v4(192, 168, 0, 100),
+        IpAddress::v4(192, 168, 1, 242),
         6969
     ).expect("HTTPD initialisation failed");
 

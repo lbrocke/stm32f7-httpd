@@ -106,8 +106,6 @@ impl<'a> HTTPD<'a> {
 
             if data.len() > 0 {
                 println!("Received {:?}", data);
-            } else {
-                println!("No chonk for me");
             }
         } else if socket.may_send() {
             println!("Closing socket");
