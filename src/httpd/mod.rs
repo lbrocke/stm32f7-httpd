@@ -1,6 +1,6 @@
 //! HTTP Server Module
 
-use alloc::{borrow::ToOwned, collections::BTreeMap};
+use alloc::{borrow::ToOwned, collections::BTreeMap, string::String, vec::Vec};
 use smoltcp::iface::{EthernetInterface, EthernetInterfaceBuilder, NeighborCache};
 use smoltcp::socket::{SocketHandle, SocketSet, TcpSocket, TcpSocketBuffer};
 use smoltcp::time::Instant;
@@ -10,12 +10,19 @@ use stm32f7_discovery::ethernet::{self, PhyError};
 use stm32f7_discovery::{self, system_clock};
 use log::{warn, debug};
 
+mod request;
+pub use self::request::Request;
+
+mod parser;
+
 pub struct HTTPD<'a> {
     ethernet_interface: EthernetInterface<'static, 'static, 'static, ethernet::EthernetDevice<'a>>,
     sockets: SocketSet<'static, 'static, 'static>,
     tcp_handle: SocketHandle,
     port: u16,
     connected: bool,
+    routes: Option<&'a Fn(&Request)>,
+    input_buffer: Vec<u8>,
 }
 
 impl<'a> HTTPD<'a> {
@@ -62,8 +69,14 @@ impl<'a> HTTPD<'a> {
                 tcp_handle,
                 port,
                 connected: false,
+                routes: None,
+                input_buffer: vec![],
             }
         })
+    }
+
+    pub fn routes(&mut self, routes: &'a Fn(&Request)) {
+        self.routes = Some(routes);
     }
 
     pub fn poll(&mut self) {
@@ -99,13 +112,18 @@ impl<'a> HTTPD<'a> {
                 .unwrap();
 
             if data.len() > 0 {
-                debug!("Received {:?}", data);
+                self.input_buffer.extend_from_slice(&data);
+                let input_as_str = String::from_utf8(self.input_buffer.to_owned()).unwrap();
 
-                socket.send_slice(&data).unwrap();
+                debug!("Input buffer: '{}'", input_as_str);
+
+                let mut request_parser = parser::HTTPParser::new(&input_as_str);
+                println!("Parse result: {:?}", request_parser.parse_head());
             }
         } else if socket.may_send() {
             debug!("Closing socket");
             socket.close();
+            self.input_buffer = vec![];
         }
     }
 }

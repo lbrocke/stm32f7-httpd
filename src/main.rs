@@ -22,7 +22,7 @@ use stm32f7_discovery::gpio::{GpioPort, OutputPin};
 use stm32f7_discovery::init;
 use stm32f7_discovery::lcd;
 use stm32f7_discovery::system_clock::{self, Hz};
-use httpd::HTTPD;
+use httpd::{HTTPD, Request};
 use log::{error};
 
 const SYSTICK: Hz = Hz(20);
@@ -106,18 +106,11 @@ fn main() -> ! {
     layer_2.clear();
 
     // set up routes
-    /*  server.routes(|request, mut response| {
-        info!("{} {}", request.method(), request.uri());
+    server.routes(&|request: &Request| {
+        println!("{} {}", request.method(), request.path());
+    });
 
-        match (request.method(), request.uri().path) {
-            (&Method::GET, "/") => {
-                Ok(reponse.body("<p>Index</p>".as_bytes().to_vec())?)
-            },
-            (_, _) => {
-                response.status(StatusCode::NOT_FOUND);
-            }
-        }
-    });*/
+    println!("Entering loop");
 
     loop {
         // poll packets and answer them
