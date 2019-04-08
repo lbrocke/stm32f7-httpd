@@ -7,7 +7,8 @@ use smoltcp::time::Instant;
 use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr};
 use stm32f7::stm32f7x6::{ETHERNET_DMA, ETHERNET_MAC, RCC, SYSCFG};
 use stm32f7_discovery::ethernet::{self, PhyError};
-use stm32f7_discovery::{self, print, println, system_clock};
+use stm32f7_discovery::{self, system_clock};
+use log::{warn, debug};
 
 pub struct HTTPD<'a> {
     ethernet_interface: EthernetInterface<'static, 'static, 'static, ethernet::EthernetDevice<'a>>,
@@ -71,7 +72,7 @@ impl<'a> HTTPD<'a> {
         match self.ethernet_interface.poll(&mut self.sockets, timestamp) {
             Ok(_) => {}
             Err(e) => {
-                println!("polling error: {}", e);
+                warn!("polling error: {}", e);
             }
         }
 
@@ -79,16 +80,16 @@ impl<'a> HTTPD<'a> {
 
         if !socket.is_open() {
             socket.listen(self.port).expect("Could not listen");
-            println!("Listening...");
+            debug!("Listening...");
         }
 
         // Socket becomes active
         if !self.connected && socket.is_active() {
-            println!("Connection established");
+            debug!("Connection established");
         }
         // Socket becomes inactive
         if self.connected && !socket.is_active() {
-            println!("Connection closed");
+            debug!("Connection closed");
         }
         self.connected = socket.is_active();
 
@@ -98,12 +99,12 @@ impl<'a> HTTPD<'a> {
                 .unwrap();
 
             if data.len() > 0 {
-                println!("Received {:?}", data);
+                debug!("Received {:?}", data);
 
                 socket.send_slice(&data).unwrap();
             }
         } else if socket.may_send() {
-            println!("Closing socket");
+            debug!("Closing socket");
             socket.close();
         }
     }

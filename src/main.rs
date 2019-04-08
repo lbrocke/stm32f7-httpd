@@ -9,6 +9,9 @@
 #[macro_use]
 extern crate alloc;
 
+mod httpd;
+mod logger;
+
 use alloc_cortex_m::CortexMHeap;
 use core::alloc::Layout as AllocLayout;
 use core::panic::PanicInfo;
@@ -18,12 +21,9 @@ use stm32f7::stm32f7x6::{CorePeripherals, Peripherals};
 use stm32f7_discovery::gpio::{GpioPort, OutputPin};
 use stm32f7_discovery::init;
 use stm32f7_discovery::lcd;
-use stm32f7_discovery::print;
-use stm32f7_discovery::println;
 use stm32f7_discovery::system_clock::{self, Hz};
-
-mod httpd;
 use httpd::HTTPD;
+use log::{error};
 
 const SYSTICK: Hz = Hz(20);
 
@@ -88,6 +88,8 @@ fn main() -> ! {
     // set stdout to layer 2
     lcd::init_stdout(layer_2);
 
+    logger::init().unwrap();
+
     unsafe { ALLOCATOR.init(cortex_m_rt::heap_start() as usize, HEAP_SIZE) }
 
     let mut server = HTTPD::new(
@@ -128,7 +130,7 @@ static ALLOCATOR: CortexMHeap = CortexMHeap::empty();
 
 #[alloc_error_handler]
 fn oom_handler(_: AllocLayout) -> ! {
-    println!("I have no memory of this");
+    error!("I have no memory of this");
     loop {}
 }
 
@@ -139,6 +141,6 @@ fn SysTick() {
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    println!("Don't panic: {:?}", info);
+    error!("Don't panic: {:?}", info);
     loop {}
 }
