@@ -12,6 +12,10 @@ use log::{warn, debug};
 
 mod request;
 pub use self::request::Request;
+mod response;
+pub use self::response::Response;
+mod status;
+pub use self::status::Status;
 
 mod parser;
 
@@ -21,7 +25,7 @@ pub struct HTTPD<'a> {
     tcp_handle: SocketHandle,
     port: u16,
     connected: bool,
-    routes_callback: Option<&'a Fn(&Request)>,
+    routes_callback: Option<&'a Fn(&Request, &mut Response)>,
     input_buffer: Vec<u8>,
 }
 
@@ -75,7 +79,7 @@ impl<'a> HTTPD<'a> {
         })
     }
 
-    pub fn routes(&mut self, routes: &'a Fn(&Request)) {
+    pub fn routes(&mut self, routes: &'a Fn(&Request, &mut Response)) {
         self.routes_callback = Some(routes);
     }
 
@@ -129,7 +133,9 @@ impl<'a> HTTPD<'a> {
                         debug!("Waiting for more input");
                     },
                     Ok(request) => {
-                        self.routes_callback.unwrap()(&request);
+                        let mut response =
+                            Response::new();
+                        self.routes_callback.unwrap()(&request, &mut response);
                     }
                 }
             }
