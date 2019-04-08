@@ -1,27 +1,20 @@
 //! HTTP Server Module
 
-use alloc::{
-    borrow::ToOwned,
-    collections::BTreeMap
-};
-use smoltcp::iface::{
-    EthernetInterface,
-    EthernetInterfaceBuilder,
-    NeighborCache
-};
+use alloc::{borrow::ToOwned, collections::BTreeMap};
+use smoltcp::iface::{EthernetInterface, EthernetInterfaceBuilder, NeighborCache};
+use smoltcp::socket::{SocketHandle, SocketSet, TcpSocket, TcpSocketBuffer};
 use smoltcp::time::Instant;
-use smoltcp::socket::{SocketSet, TcpSocket, TcpSocketBuffer, SocketHandle};
 use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr};
 use stm32f7::stm32f7x6::{ETHERNET_DMA, ETHERNET_MAC, RCC, SYSCFG};
-use stm32f7_discovery::{self, print, println, system_clock};
 use stm32f7_discovery::ethernet::{self, PhyError};
+use stm32f7_discovery::{self, print, println, system_clock};
 
 pub struct HTTPD<'a> {
     ethernet_interface: EthernetInterface<'static, 'static, 'static, ethernet::EthernetDevice<'a>>,
     sockets: SocketSet<'static, 'static, 'static>,
     tcp_handle: SocketHandle,
     port: u16,
-    connected: bool
+    connected: bool,
 }
 
 impl<'a> HTTPD<'a> {
@@ -42,7 +35,8 @@ impl<'a> HTTPD<'a> {
             ethernet_mac,
             ethernet_dma,
             ethernet_addr,
-        ).map(|ethernet_device| {
+        )
+        .map(|ethernet_device| {
             let ip_addresses = [IpCidr::new(ip_addr, 24)];
 
             let tcp_receive_buffer = TcpSocketBuffer::new(vec![0; ethernet::MTU]);
@@ -66,7 +60,7 @@ impl<'a> HTTPD<'a> {
                 sockets,
                 tcp_handle,
                 port,
-                connected: false
+                connected: false,
             }
         })
     }
@@ -114,4 +108,3 @@ impl<'a> HTTPD<'a> {
         }
     }
 }
-
