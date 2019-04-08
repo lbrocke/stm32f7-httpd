@@ -107,9 +107,16 @@ fn main() -> ! {
     server.routes(&|request: &Request| {
         info!("{} {}", request.method(), request.path());
 
+        let space_for_values = 60 - 4 - 5;
+
         info!("Headers:");
         for (key, value) in request.headers().iter() {
-            info!("{} =\n  {}", key, value);
+            info!("{} =", key);
+            if value.len() > space_for_values {
+                info!("    {}[...]", &value[..space_for_values]);
+            } else {
+                info!("    {}", value);
+            }
         }
     });
 
