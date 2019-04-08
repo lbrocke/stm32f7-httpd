@@ -101,6 +101,8 @@ fn main() -> ! {
     )
     .expect("HTTPD initialisation failed");
 
+    layer_2.clear();
+
     // set up routes
     /*  server.routes(|request, mut response| {
         info!("{} {}", request.method(), request.uri());
