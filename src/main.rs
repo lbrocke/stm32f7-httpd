@@ -23,7 +23,7 @@ use stm32f7_discovery::init;
 use stm32f7_discovery::lcd;
 use stm32f7_discovery::system_clock::{self, Hz};
 use httpd::{HTTPD, Request};
-use log::{error};
+use log::{error, info};
 
 const SYSTICK: Hz = Hz(20);
 
@@ -103,14 +103,17 @@ fn main() -> ! {
     )
     .expect("HTTPD initialisation failed");
 
-    layer_2.clear();
-
     // set up routes
     server.routes(&|request: &Request| {
-        println!("{} {}", request.method(), request.path());
+        info!("{} {}", request.method(), request.path());
+
+        info!("Headers:");
+        for (key, value) in request.headers().iter() {
+            info!("{} =\n  {}", key, value);
+        }
     });
 
-    println!("Entering loop");
+    info!("Entering loop");
 
     loop {
         // poll packets and answer them

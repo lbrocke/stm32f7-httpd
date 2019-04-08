@@ -21,7 +21,7 @@ pub struct HTTPD<'a> {
     tcp_handle: SocketHandle,
     port: u16,
     connected: bool,
-    routes: Option<&'a Fn(&Request)>,
+    routes_callback: Option<&'a Fn(&Request)>,
     input_buffer: Vec<u8>,
 }
 
@@ -69,14 +69,14 @@ impl<'a> HTTPD<'a> {
                 tcp_handle,
                 port,
                 connected: false,
-                routes: None,
+                routes_callback: None,
                 input_buffer: vec![],
             }
         })
     }
 
     pub fn routes(&mut self, routes: &'a Fn(&Request)) {
-        self.routes = Some(routes);
+        self.routes_callback = Some(routes);
     }
 
     pub fn poll(&mut self) {
@@ -117,8 +117,21 @@ impl<'a> HTTPD<'a> {
 
                 debug!("Input buffer: '{}'", input_as_str);
 
-                let mut request_parser = parser::HTTPParser::new(&input_as_str);
-                println!("Parse result: {:?}", request_parser.parse_head());
+                let mut request_parser =
+                    parser::HTTPParser::new(&input_as_str);
+
+                match request_parser.parse_head() {
+                    Err(parser::ParseError::Fatal) => {
+                        debug!("Could not parse HTTP request");
+                        socket.close();
+                    },
+                    Err(parser::ParseError::NotEnoughInput) => {
+                        debug!("Waiting for more input");
+                    },
+                    Ok(request) => {
+                        self.routes_callback.unwrap()(&request);
+                    }
+                }
             }
         } else if socket.may_send() {
             debug!("Closing socket");

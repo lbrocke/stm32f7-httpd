@@ -1,6 +1,6 @@
 use alloc::{
     collections::BTreeMap,
-    string::{String, ToString}
+    string::{String},
 };
 
 #[derive(Debug)]
@@ -8,11 +8,16 @@ pub struct Request {
     method: String,
     path: String,
     version: String,
-    headers: BTreeMap<String, String>
+    headers: BTreeMap<String, String>,
 }
 
 impl Request {
-    pub fn new(method: String, path: String, version: String, headers: BTreeMap<String, String>) -> Request {
+    pub fn new(
+        method: String,
+        path: String,
+        version: String,
+        headers: BTreeMap<String, String>,
+    ) -> Request {
         Request {
             method,
             path,
@@ -33,7 +38,7 @@ impl Request {
         &self.version
     }
 
-    pub fn get_header(&self, key: String) -> Option<String> {
-        self.headers.get(&key).map(|maybe_val| maybe_val.to_string())
+    pub fn headers(&self) -> &BTreeMap<String, String> {
+        &self.headers
     }
 }
