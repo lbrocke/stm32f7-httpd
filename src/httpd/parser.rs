@@ -7,7 +7,7 @@ use alloc::{
 use super::request::Request;
 
 pub struct HTTPParser {
-    source: String,
+    pub source: String,
     method: Option<String>,
     path: Option<String>,
     version: Option<String>,
@@ -44,7 +44,7 @@ impl HTTPParser {
                     self.method.to_owned().unwrap(),
                     self.path.to_owned().unwrap(),
                     self.version.to_owned().unwrap(),
-                    self.headers.to_owned()
+                    self.headers.to_owned(),
                 ))
             })
     }
@@ -107,7 +107,7 @@ impl HTTPParser {
         let mut maybe_value = None;
 
         self.read_until(":")
-            .map(|key| maybe_key = Some(key))
+            .map(|key| maybe_key = Some(key.to_lowercase()))
             .and_then(|_| self.expect(":"))
             .and_then(|_| self.read_until("\r\n"))
             .map(|value| maybe_value = Some(value))

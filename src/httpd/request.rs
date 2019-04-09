@@ -1,9 +1,6 @@
-use alloc::{
-    collections::BTreeMap,
-    string::{String},
-};
+use alloc::{collections::BTreeMap, string::String};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Request {
     method: String,
     path: String,

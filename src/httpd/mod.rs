@@ -1,6 +1,7 @@
 //! HTTP Server Module
 
 use alloc::{borrow::ToOwned, collections::BTreeMap, string::String, vec::Vec};
+use log::{debug, info, warn};
 use smoltcp::iface::{EthernetInterface, EthernetInterfaceBuilder, NeighborCache};
 use smoltcp::socket::{SocketHandle, SocketSet, TcpSocket, TcpSocketBuffer};
 use smoltcp::time::Instant;
@@ -8,7 +9,6 @@ use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr};
 use stm32f7::stm32f7x6::{ETHERNET_DMA, ETHERNET_MAC, RCC, SYSCFG};
 use stm32f7_discovery::ethernet::{self, PhyError};
 use stm32f7_discovery::{self, system_clock};
-use log::{warn, debug};
 
 mod request;
 pub use self::request::Request;
@@ -18,6 +18,7 @@ mod status;
 pub use self::status::Status;
 
 mod parser;
+use parser::{HTTPParser, ParseError};
 
 pub struct HTTPD<'a> {
     ethernet_interface: EthernetInterface<'static, 'static, 'static, ethernet::EthernetDevice<'a>>,
@@ -27,7 +28,7 @@ pub struct HTTPD<'a> {
     connected: bool,
     routes_callback: Option<&'a Fn(&Request) -> Response>,
     input_buffer: Vec<u8>,
-    want_receive: bool
+    request_state: RequestState,
 }
 
 impl<'a> HTTPD<'a> {
@@ -76,7 +77,7 @@ impl<'a> HTTPD<'a> {
                 connected: false,
                 routes_callback: None,
                 input_buffer: vec![],
-                want_receive: false
+                request_state: RequestState::Wait,
             }
         })
     }
@@ -91,7 +92,7 @@ impl<'a> HTTPD<'a> {
         match self.ethernet_interface.poll(&mut self.sockets, timestamp) {
             Ok(_) => {}
             Err(e) => {
-                warn!("polling error: {}", e);
+                debug!("polling error: {}", e);
             }
         }
 
@@ -99,23 +100,107 @@ impl<'a> HTTPD<'a> {
             PollStatus::Established => self.request_init(),
             PollStatus::Received(data) => self.request_receive(data),
             PollStatus::Closed => self.request_close(),
-            PollStatus::Inactive => ()
+            PollStatus::Inactive => (),
         }
     }
 
     fn request_init(&mut self) {
-        debug!("Init");
+        info!("Connection opened");
+        self.input_buffer = vec![];
+        self.request_state = RequestState::ReadHead;
     }
 
     fn request_receive(&mut self, chunk: Vec<u8>) {
-        debug!("Received: {:?}", chunk);
+        let read = chunk.len();
+        debug!("Received {} bytes", read);
+
+        self.input_buffer.extend(chunk);
+
+        match &self.request_state {
+            RequestState::ReadHead => self.read_head(),
+            RequestState::ReadBody(request, bytes_to_read) => {
+                self.read_body(request.clone(), *bytes_to_read, read)
+            },
+            state => warn!("Can't receive in state {:?}", state)
+        }
     }
 
+    fn read_body(&mut self, request: Request, bytes_to_read: usize, read: usize) {
+        self.request_state =
+            if read >= bytes_to_read {
+                self.input_buffer.truncate(self.input_buffer.len() - (read - bytes_to_read));
+                RequestState::Done(request, self.input_buffer.clone())
+            } else {
+                RequestState::ReadBody(request, bytes_to_read - read)
+            }
+    }
+
+    fn read_head(&mut self) {
+        // TODO: do this better (i'm sure it's possible)
+        // This expression basically copies the buffer
+        //                      v----------------------------v
+        match String::from_utf8(self.input_buffer[..].to_vec()) {
+            Ok(input_string) =>
+            {
+            let mut parser = HTTPParser::new(&input_string);
+
+                match parser.parse_head() {
+                Ok(request_head) => {
+                    debug!("Request head parsed.");
+
+                    let content_length_res = request_head.headers().get("content-length").and_then(
+                        |content_length_field| content_length_field.parse::<usize>().ok(),
+                    );
+
+                    match content_length_res {
+                        Some(content_length) => {
+                            self.input_buffer = parser.source.as_bytes().to_vec();
+                            self.read_body(request_head, content_length, self.input_buffer.len());
+                        }
+                        None => self.request_state = RequestState::Done(request_head, vec![]),
+                    }
+                }
+                Err(ParseError::NotEnoughInput) => {
+                    debug!("Request header incomplete");
+                }
+                Err(ParseError::Fatal) => {
+                    warn!("Could not parse request header");
+                    self.request_state = RequestState::ParseError;
+                }
+            }},
+            Err(_e) => {
+                warn!("Request header is not UTF-8");
+                self.request_state = RequestState::ParseError;
+            }
+        }
+    }
+
+
     fn request_close(&mut self) {
-        debug!("Close");
+        info!("Connection closed");
+
+        match &self.request_state {
+            RequestState::Done(request, body) => {
+                debug!("Request head:");
+                debug!("{:?}", request);
+                debug!("Body:");
+                debug!("{:?}", body);
+            },
+            _ => warn!("Early close")
+        }
+    }
+
+    fn want_receive(&self) -> bool {
+        match self.request_state {
+            RequestState::ReadHead | RequestState::ReadBody(_, _) => true,
+            _ => false
+        }
     }
 
     fn poll_socket(&mut self) -> PollStatus {
+        // Needed below, but 'let mut socket' keeps a mut ref to self
+        let want_receive = self.want_receive();
+
         let mut socket = self.sockets.get::<TcpSocket>(self.tcp_handle);
 
         let old_connection_status = self.connected;
@@ -126,15 +211,15 @@ impl<'a> HTTPD<'a> {
                 PollStatus::Established
             } else {
                 PollStatus::Closed
-            }
+            };
         }
 
         if !socket.is_open() {
             socket.listen(self.port).expect("Could not listen");
-            debug!("Listening...");
+            info!("Listening...");
         }
 
-        if socket.may_recv() {
+        if socket.may_recv() && want_receive {
             let data = socket
                 .recv(|recv_buffer| (recv_buffer.len(), recv_buffer.to_owned()))
                 .unwrap();
@@ -143,7 +228,6 @@ impl<'a> HTTPD<'a> {
                 return PollStatus::Received(data);
             }
         } else if socket.may_send() {
-            debug!("Closing socket");
             socket.close();
         }
 
@@ -155,5 +239,14 @@ enum PollStatus {
     Established,
     Received(Vec<u8>),
     Closed,
-    Inactive
+    Inactive,
+}
+
+#[derive(Clone, Debug)]
+enum RequestState {
+    Wait,
+    ReadHead,
+    ReadBody(Request, usize),
+    Done(Request, Vec<u8>),
+    ParseError,
 }

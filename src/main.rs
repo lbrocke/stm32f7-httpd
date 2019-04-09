@@ -14,12 +14,11 @@ mod logger;
 
 use alloc::{
     collections::BTreeMap,
-    string::ToString,
-    vec::Vec,
 };
 use alloc_cortex_m::CortexMHeap;
 use core::alloc::Layout as AllocLayout;
 use core::panic::PanicInfo;
+use cortex_m::asm;
 use cortex_m_rt::{entry, exception};
 use smoltcp::wire::{EthernetAddress, IpAddress, Ipv4Address};
 use stm32f7::stm32f7x6::{CorePeripherals, Peripherals};
@@ -28,7 +27,7 @@ use stm32f7_discovery::init;
 use stm32f7_discovery::lcd;
 use stm32f7_discovery::system_clock::{self, Hz};
 use httpd::{HTTPD, Request, Response};
-use log::{error, info};
+use log::{info, error};
 
 const SYSTICK: Hz = Hz(20);
 
@@ -145,6 +144,7 @@ static ALLOCATOR: CortexMHeap = CortexMHeap::empty();
 #[alloc_error_handler]
 fn oom_handler(_: AllocLayout) -> ! {
     error!("I have no memory of this");
+    asm::bkpt();
     loop {}
 }
 
@@ -156,5 +156,6 @@ fn SysTick() {
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     error!("Don't panic: {:?}", info);
+    asm::bkpt();
     loop {}
 }

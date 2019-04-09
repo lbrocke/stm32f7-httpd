@@ -1,9 +1,5 @@
-use alloc::{
-    collections::BTreeMap,
-    string::String,
-    vec::Vec,
-};
 use super::status::Status;
+use alloc::{collections::BTreeMap, string::String, vec::Vec};
 
 pub struct Response {
     status: Status,
@@ -13,6 +9,10 @@ pub struct Response {
 
 impl Response {
     pub fn new(status: Status, headers: BTreeMap<String, String>, body: Vec<u8>) -> Response {
-        Response { status, headers, body }
+        Response {
+            status,
+            headers,
+            body,
+        }
     }
 }
