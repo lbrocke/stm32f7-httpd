@@ -12,7 +12,11 @@ extern crate alloc;
 mod httpd;
 mod logger;
 
-use alloc::string::ToString;
+use alloc::{
+    collections::BTreeMap,
+    string::ToString,
+    vec::Vec,
+};
 use alloc_cortex_m::CortexMHeap;
 use core::alloc::Layout as AllocLayout;
 use core::panic::PanicInfo;
@@ -31,7 +35,7 @@ const SYSTICK: Hz = Hz(20);
 const HEAP_SIZE: usize = 50 * 1024;
 
 const ETH_ADDR: EthernetAddress = EthernetAddress([0x00, 0x08, 0xDC, 0xAB, 0xCD, 0xEF]);
-const IP_ADDR: IpAddress = IpAddress::Ipv4(Ipv4Address([192, 168, 0, 100]));
+const IP_ADDR: IpAddress = IpAddress::Ipv4(Ipv4Address([192, 168, 1, 42]));
 const PORT: u16 = 8000;
 
 const PAGE_SOURCE: &str = include_str!("httpd/index.html");
@@ -106,8 +110,10 @@ fn main() -> ! {
     )
     .expect("HTTPD initialisation failed");
 
+    info!("My IP: {:?}", IP_ADDR);
+
     // set up routes
-    server.routes(&|request: &Request, response: &mut Response| {
+    server.routes(&|request: &Request| {
         info!("{} {}", request.method(), request.path());
 
         let space_for_values = 60 - 4 - 5;
@@ -122,11 +128,7 @@ fn main() -> ! {
             }
         }
 
-        response.status(httpd::Status::OK);
-        response.header("Content-Length", &(PAGE_SOURCE.len().to_string()[..]));
-        response.header("Content-Type", "text/html");
-        response.write(&PAGE_SOURCE[..]);
-        response.end();
+        Response::new(httpd::Status::OK, BTreeMap::new(), vec![])
     });
 
     info!("Entering loop");

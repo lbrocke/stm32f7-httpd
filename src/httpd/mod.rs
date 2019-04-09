@@ -25,8 +25,9 @@ pub struct HTTPD<'a> {
     tcp_handle: SocketHandle,
     port: u16,
     connected: bool,
-    routes_callback: Option<&'a Fn(&Request, &mut Response)>,
+    routes_callback: Option<&'a Fn(&Request) -> Response>,
     input_buffer: Vec<u8>,
+    want_receive: bool
 }
 
 impl<'a> HTTPD<'a> {
@@ -75,12 +76,13 @@ impl<'a> HTTPD<'a> {
                 connected: false,
                 routes_callback: None,
                 input_buffer: vec![],
+                want_receive: false
             }
         })
     }
 
-    pub fn routes(&mut self, routes: &'a Fn(&Request, &mut Response)) {
-        self.routes_callback = Some(routes);
+    pub fn routes(&mut self, routes_callback: &'a Fn(&Request) -> Response) {
+        self.routes_callback = Some(routes_callback);
     }
 
     pub fn poll(&mut self) {
@@ -93,22 +95,44 @@ impl<'a> HTTPD<'a> {
             }
         }
 
+        match self.poll_socket() {
+            PollStatus::Established => self.request_init(),
+            PollStatus::Received(data) => self.request_receive(data),
+            PollStatus::Closed => self.request_close(),
+            PollStatus::Inactive => ()
+        }
+    }
+
+    fn request_init(&mut self) {
+        debug!("Init");
+    }
+
+    fn request_receive(&mut self, chunk: Vec<u8>) {
+        debug!("Received: {:?}", chunk);
+    }
+
+    fn request_close(&mut self) {
+        debug!("Close");
+    }
+
+    fn poll_socket(&mut self) -> PollStatus {
         let mut socket = self.sockets.get::<TcpSocket>(self.tcp_handle);
+
+        let old_connection_status = self.connected;
+        self.connected = socket.is_active();
+
+        if old_connection_status != self.connected {
+            return if self.connected {
+                PollStatus::Established
+            } else {
+                PollStatus::Closed
+            }
+        }
 
         if !socket.is_open() {
             socket.listen(self.port).expect("Could not listen");
             debug!("Listening...");
         }
-
-        // Socket becomes active
-        if !self.connected && socket.is_active() {
-            debug!("Connection established");
-        }
-        // Socket becomes inactive
-        if self.connected && !socket.is_active() {
-            debug!("Connection closed");
-        }
-        self.connected = socket.is_active();
 
         if socket.may_recv() {
             let data = socket
@@ -116,33 +140,20 @@ impl<'a> HTTPD<'a> {
                 .unwrap();
 
             if data.len() > 0 {
-                self.input_buffer.extend_from_slice(&data);
-                let input_as_str = String::from_utf8(self.input_buffer.to_owned()).unwrap();
-
-                debug!("Input buffer: '{}'", input_as_str);
-
-                let mut request_parser =
-                    parser::HTTPParser::new(&input_as_str);
-
-                match request_parser.parse_head() {
-                    Err(parser::ParseError::Fatal) => {
-                        debug!("Could not parse HTTP request");
-                        socket.close();
-                    },
-                    Err(parser::ParseError::NotEnoughInput) => {
-                        debug!("Waiting for more input");
-                    },
-                    Ok(request) => {
-                        let mut response =
-                            Response::new();
-                        self.routes_callback.unwrap()(&request, &mut response);
-                    }
-                }
+                return PollStatus::Received(data);
             }
         } else if socket.may_send() {
             debug!("Closing socket");
             socket.close();
-            self.input_buffer = vec![];
         }
+
+        PollStatus::Inactive
     }
+}
+
+enum PollStatus {
+    Established,
+    Received(Vec<u8>),
+    Closed,
+    Inactive
 }
