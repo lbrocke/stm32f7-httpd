@@ -39,7 +39,7 @@ extern crate log;
 
 use alloc::string::String;
 use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
-use stm32f7_discovery::{print, println, system_clock};
+use stm32f7_discovery::{lcd, print, println, system_clock};
 
 struct Stm32f7Logger;
 
@@ -52,6 +52,10 @@ impl log::Log for Stm32f7Logger {
     }
 
     fn log(&self, record: &Record) {
+        if !lcd::stdout::is_initialized() {
+            return;
+        }
+
         if self.enabled(record.metadata()) {
             let clock = system_clock::ms() as u64;
             let sec = clock / 1000;
