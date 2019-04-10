@@ -1,8 +1,9 @@
 //! Custom logger indented for use with the STM32F7-Discovery board
 
-//! IMPORTANT: This logger requires the LCD display to be set up beforehand.
-//! This means that one of the two LCD layers should have been initialited for
-//! use with stdout:
+//! The logger prints to the host stdout as well as the microcontroller LCD.
+//! This of course requires the LCD display to be set up beforehand. This means
+//! that one of the two LCD layers should have been initialited for use with
+//! stdout:
 //!
 //! ```
 //! lcd::init_stdout(layer_2);
@@ -39,6 +40,8 @@ extern crate log;
 
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::fmt::Write;
+use cortex_m_semihosting::hio;
 use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
 use stm32f7_discovery::{lcd, print, println, system_clock};
 
@@ -55,7 +58,7 @@ impl log::Log for Stm32f7Logger {
     }
 
     fn log(&self, record: &Record) {
-        if !lcd::stdout::is_initialized() || !self.enabled(record.metadata()) {
+        if !self.enabled(record.metadata()) {
             return;
         }
 
@@ -74,19 +77,27 @@ impl log::Log for Stm32f7Logger {
 
         let message = format!("{}{}", lvl, record.args());
 
-        // split message into fixed-sized substrings
-        let prefix_len = prefix.chars().count();
-        let lines = split_string(&message, NUM_COLS - prefix_len);
+        // print to host stdout
+        if let Ok(mut hstdout) = hio::hstdout() {
+            let _ = writeln!(hstdout, "{}{}", prefix, message);
+        }
 
-        for line in 0..lines.len() {
-            if line == 0 {
-                print!("{}", prefix);
-            } else {
-                // indent following lines with whitespace
-                print!("{}", " ".repeat(prefix_len));
+        // print to LCD
+        if lcd::stdout::is_initialized() {
+            // split message into fixed-sized substrings
+            let prefix_len = prefix.chars().count();
+            let lines = split_string(&message, NUM_COLS - prefix_len);
+
+            for line in 0..lines.len() {
+                if line == 0 {
+                    print!("{}", prefix);
+                } else {
+                    // indent following lines with whitespace
+                    print!("{}", " ".repeat(prefix_len));
+                }
+
+                println!("{}", lines[line]);
             }
-
-            println!("{}", lines[line]);
         }
     }
 
