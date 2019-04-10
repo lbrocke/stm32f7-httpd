@@ -20,27 +20,27 @@ pub use self::status::Status;
 mod parser;
 use parser::{HTTPParser, ParseError};
 
-pub struct HTTPD<'a> {
-    ethernet_interface: EthernetInterface<'static, 'static, 'static, ethernet::EthernetDevice<'a>>,
+pub struct HTTPD {
+    ethernet_interface: EthernetInterface<'static, 'static, 'static, ethernet::EthernetDevice>,
     sockets: SocketSet<'static, 'static, 'static>,
     tcp_handle: SocketHandle,
     port: u16,
     connected: bool,
-    routes_callback: Option<&'a Fn(&Request) -> Response>,
+    routes_callback: Option<&'static Fn(&Request) -> Response>,
     input_buffer: Vec<u8>,
     request_state: RequestState,
 }
 
-impl<'a> HTTPD<'a> {
-    pub fn new<'b>(
+impl HTTPD {
+    pub fn new(
         rcc: &mut RCC,
         syscfg: &mut SYSCFG,
         ethernet_mac: &mut ETHERNET_MAC,
-        ethernet_dma: &'b mut ETHERNET_DMA,
+        ethernet_dma: ETHERNET_DMA,
         ethernet_addr: EthernetAddress,
         ip_addr: IpAddress,
         port: u16,
-    ) -> Result<HTTPD<'b>, PhyError> {
+    ) -> Result<HTTPD, PhyError> {
         ethernet::EthernetDevice::new(
             Default::default(),
             Default::default(),
@@ -82,7 +82,7 @@ impl<'a> HTTPD<'a> {
         })
     }
 
-    pub fn routes(&mut self, routes_callback: &'a Fn(&Request) -> Response) {
+    pub fn routes(&mut self, routes_callback: &'static Fn(&Request) -> Response) {
         self.routes_callback = Some(routes_callback);
     }
 
@@ -185,6 +185,8 @@ impl<'a> HTTPD<'a> {
                 debug!("{:?}", request);
                 debug!("Body:");
                 debug!("{:?}", body);
+
+                self.request_state = RequestState::Wait
             },
             _ => warn!("Early close")
         }
