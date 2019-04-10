@@ -24,7 +24,7 @@ use smoltcp::wire::{EthernetAddress, IpAddress, Ipv4Address};
 use stm32f7::stm32f7x6::{CorePeripherals, Peripherals};
 use stm32f7_discovery::gpio::{GpioPort, OutputPin};
 use stm32f7_discovery::init;
-use stm32f7_discovery::lcd;
+use stm32f7_discovery::lcd::{self, Color};
 use stm32f7_discovery::system_clock::{self, Hz};
 use httpd::{HTTPD, Request, Response};
 use log::{info, error};
@@ -84,6 +84,9 @@ fn main() -> ! {
     // enable display and backlight
     pins.display_enable.set(true);
     pins.backlight.set(true);
+
+    // Set text color (white)
+    lcd.set_color_lookup_table(255, Color::rgb(255, 255, 255));
 
     // set up layers
     let mut layer_1 = lcd.layer_1().unwrap();
