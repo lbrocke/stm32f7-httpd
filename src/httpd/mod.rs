@@ -182,8 +182,6 @@ impl HTTPD {
         }
     }
 
-    fn request_response(&mut self) {}
-
     fn request_close(&self) {
         info!("Connection closed");
     }
