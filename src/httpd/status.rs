@@ -1,11 +1,12 @@
+#[derive(Clone, Debug)]
 pub enum Status {
     OK,
 }
 
 impl Status {
-    pub fn to_numerical(&self) -> u16 {
+    pub fn numerical_and_text(&self) -> (u16, &str) {
         match self {
-            Status::OK => 200,
+            Status::OK => (200, "OK"),
         }
     }
 }

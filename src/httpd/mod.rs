@@ -26,7 +26,7 @@ pub struct HTTPD {
     tcp_handle: SocketHandle,
     port: u16,
     connected: bool,
-    routes_callback: Option<&'static Fn(&Request) -> Response>,
+    routes_callback: Option<&'static Fn(&Request, &Vec<u8>) -> Response>,
     input_buffer: Vec<u8>,
     request_state: RequestState,
 }
@@ -82,7 +82,7 @@ impl HTTPD {
         })
     }
 
-    pub fn routes(&mut self, routes_callback: &'static Fn(&Request) -> Response) {
+    pub fn routes(&mut self, routes_callback: &'static Fn(&Request, &Vec<u8>) -> Response) {
         self.routes_callback = Some(routes_callback);
     }
 
@@ -120,19 +120,19 @@ impl HTTPD {
             RequestState::ReadHead => self.read_head(),
             RequestState::ReadBody(request, bytes_to_read) => {
                 self.read_body(request.clone(), *bytes_to_read, read)
-            },
-            state => warn!("Can't receive in state {:?}", state)
+            }
+            state => warn!("Can't receive in state {:?}", state),
         }
     }
 
     fn read_body(&mut self, request: Request, bytes_to_read: usize, read: usize) {
-        self.request_state =
-            if read >= bytes_to_read {
-                self.input_buffer.truncate(self.input_buffer.len() - (read - bytes_to_read));
-                RequestState::Done(request, self.input_buffer.clone())
-            } else {
-                RequestState::ReadBody(request, bytes_to_read - read)
-            }
+        self.request_state = if read >= bytes_to_read {
+            self.input_buffer
+                .truncate(self.input_buffer.len() - (read - bytes_to_read));
+            RequestState::RequestRead(request, self.input_buffer.clone())
+        } else {
+            RequestState::ReadBody(request, bytes_to_read - read)
+        }
     }
 
     fn read_head(&mut self) {
@@ -140,34 +140,41 @@ impl HTTPD {
         // This expression basically copies the buffer
         //                      v----------------------------v
         match String::from_utf8(self.input_buffer[..].to_vec()) {
-            Ok(input_string) =>
-            {
-            let mut parser = HTTPParser::new(&input_string);
+            Ok(input_string) => {
+                let mut parser = HTTPParser::new(&input_string);
 
                 match parser.parse_head() {
-                Ok(request_head) => {
-                    debug!("Request head parsed.");
+                    Ok(request_head) => {
+                        debug!("Request head parsed.");
 
-                    let content_length_res = request_head.headers().get("content-length").and_then(
-                        |content_length_field| content_length_field.parse::<usize>().ok(),
-                    );
+                        let content_length_res =
+                            request_head.headers().get("content-length").and_then(
+                                |content_length_field| content_length_field.parse::<usize>().ok(),
+                            );
 
-                    match content_length_res {
-                        Some(content_length) => {
-                            self.input_buffer = parser.source.as_bytes().to_vec();
-                            self.read_body(request_head, content_length, self.input_buffer.len());
+                        match content_length_res {
+                            Some(content_length) => {
+                                self.input_buffer = parser.source.as_bytes().to_vec();
+                                self.read_body(
+                                    request_head,
+                                    content_length,
+                                    self.input_buffer.len(),
+                                );
+                            }
+                            None => {
+                                self.request_state = RequestState::RequestRead(request_head, vec![])
+                            }
                         }
-                        None => self.request_state = RequestState::Done(request_head, vec![]),
+                    }
+                    Err(ParseError::NotEnoughInput) => {
+                        debug!("Request header incomplete");
+                    }
+                    Err(ParseError::Fatal) => {
+                        warn!("Could not parse request header");
+                        self.request_state = RequestState::ParseError;
                     }
                 }
-                Err(ParseError::NotEnoughInput) => {
-                    debug!("Request header incomplete");
-                }
-                Err(ParseError::Fatal) => {
-                    warn!("Could not parse request header");
-                    self.request_state = RequestState::ParseError;
-                }
-            }},
+            }
             Err(_e) => {
                 warn!("Request header is not UTF-8");
                 self.request_state = RequestState::ParseError;
@@ -175,27 +182,16 @@ impl HTTPD {
         }
     }
 
+    fn request_response(&mut self) {}
 
-    fn request_close(&mut self) {
+    fn request_close(&self) {
         info!("Connection closed");
-
-        match &self.request_state {
-            RequestState::Done(request, body) => {
-                debug!("Request head:");
-                debug!("{:?}", request);
-                debug!("Body:");
-                debug!("{:?}", body);
-
-                self.request_state = RequestState::Wait
-            },
-            _ => warn!("Early close")
-        }
     }
 
     fn want_receive(&self) -> bool {
         match self.request_state {
             RequestState::ReadHead | RequestState::ReadBody(_, _) => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -230,6 +226,36 @@ impl HTTPD {
                 return PollStatus::Received(data);
             }
         } else if socket.may_send() {
+            match &self.request_state {
+                RequestState::RequestRead(request, body) => {
+                    debug!("Request head:");
+                    debug!("{:?}", request);
+                    debug!("Body:");
+                    debug!("{:?}", body);
+
+                    let response = match self.routes_callback {
+                        None => unimplemented!(),
+                        Some(routes_cb) => routes_cb(request, body),
+                    };
+                    let (status_num, status_text) = response.status.numerical_and_text();
+
+                    socket
+                        .send_slice(
+                            format!("HTTP/1.1 {} {}\r\n", status_num, status_text).as_bytes(),
+                        )
+                        .expect("Could not send head line");
+
+                    for (key, value) in response.headers {
+                        socket.send_slice(format!("{}: {}\r\n", key, value).as_bytes()).expect("Could not send header");
+                    }
+
+                    socket.send_slice("\r\n".as_bytes()).expect("Could not send end-of-header");
+
+                    socket.send_slice(&response.body).expect("Could not send body");;
+                }
+                _ => warn!("Request not read"),
+            }
+
             socket.close();
         }
 
@@ -249,6 +275,6 @@ enum RequestState {
     Wait,
     ReadHead,
     ReadBody(Request, usize),
-    Done(Request, Vec<u8>),
+    RequestRead(Request, Vec<u8>),
     ParseError,
 }

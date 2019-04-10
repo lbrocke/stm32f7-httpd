@@ -14,6 +14,9 @@ mod logger;
 
 use alloc::{
     collections::BTreeMap,
+    vec::Vec,
+    string::ToString,
+    borrow::ToOwned,
 };
 use alloc_cortex_m::CortexMHeap;
 use core::alloc::Layout as AllocLayout;
@@ -115,7 +118,7 @@ fn main() -> ! {
     info!("My IP: {:?}", IP_ADDR);
 
     // set up routes
-    server.routes(&|request: &Request| {
+    server.routes(&|request: &Request, body: &Vec<u8>| {
         info!("{} {}", request.method(), request.path());
 
         let space_for_values = 60 - 4 - 5;
@@ -130,7 +133,14 @@ fn main() -> ! {
             }
         }
 
-        Response::new(httpd::Status::OK, BTreeMap::new(), vec![])
+        info!("Body:");
+        info!("{:?}", body);
+
+        let mut headers = BTreeMap::new();
+        headers.insert("content-type".to_string(), "application/octet-stream".to_string());
+        headers.insert("content-length".to_string(), format!("{}", body.len()));
+
+        Response::new(httpd::Status::OK, headers, body.to_owned())
     });
 
     info!("Entering loop");

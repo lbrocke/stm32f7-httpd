@@ -1,10 +1,11 @@
 use super::status::Status;
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 
+#[derive(Clone, Debug)]
 pub struct Response {
-    status: Status,
-    headers: BTreeMap<String, String>,
-    body: Vec<u8>,
+    pub status: Status,
+    pub headers: BTreeMap<String, String>,
+    pub body: Vec<u8>,
 }
 
 impl Response {
