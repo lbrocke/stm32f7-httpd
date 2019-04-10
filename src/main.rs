@@ -33,7 +33,7 @@ const HEAP_SIZE: usize = 50 * 1024;
 
 const ETH_ADDR: EthernetAddress = EthernetAddress([0x00, 0x08, 0xDC, 0xAB, 0xCD, 0xEF]);
 const IP_ADDR: IpAddress = IpAddress::Ipv4(Ipv4Address([192, 168, 1, 42]));
-const PORT: u16 = 8000;
+const PORT: u16 = 80;
 
 const PAGE_SOURCE: &str = include_str!("httpd/index.html");
 
@@ -110,7 +110,7 @@ fn main() -> ! {
     )
     .expect("HTTPD initialisation failed");
 
-    info!("My IP: {:?}", IP_ADDR);
+    info!("Server initialized on {}:{}", IP_ADDR, PORT);
 
     // set up routes
     server.routes(&|request: &Request, _body: &Vec<u8>| {
