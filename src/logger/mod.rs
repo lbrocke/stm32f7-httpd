@@ -78,9 +78,11 @@ impl log::Log for Stm32f7Logger {
         let message = format!("{}{}", lvl, record.args());
 
         // print to host stdout
-        if let Ok(mut hstdout) = hio::hstdout() {
-            let _ = writeln!(hstdout, "{}{}", prefix, message);
-        }
+        /*
+            if let Ok(mut hstdout) = hio::hstdout() {
+                let _ = writeln!(hstdout, "{}{}", prefix, message);
+            }
+        */
 
         // print to LCD
         if lcd::stdout::is_initialized() {
