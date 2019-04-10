@@ -16,6 +16,8 @@ mod response;
 pub use self::response::Response;
 mod status;
 pub use self::status::Status;
+mod routes;
+pub use self::routes::Routes;
 
 mod parser;
 use parser::{HTTPParser, ParseError};

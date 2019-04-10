@@ -27,7 +27,8 @@ use stm32f7_discovery::{
 use stm32f7_httpd::httpd::{
     self,
     Request,
-    Response
+    Response,
+    Routes
 };
 use smoltcp::wire::{
     EthernetAddress,
@@ -43,6 +44,7 @@ const IP_ADDRESS: IpAddress = IpAddress::Ipv4(Ipv4Address([192, 168, 1, 42]));
 const PORT: u16 = 80;
 
 const PAGE_INDEX: &str = include_str!("wiki/index.html");
+const PAGE_NOTFOUND: &str = include_str!("wiki/notfound.html");
 
 #[entry]
 fn main() -> ! {
@@ -121,15 +123,29 @@ fn main() -> ! {
     server.routes(&|request: &Request, _body| {
         println!("Got {} request on {}", request.method(), request.path());
 
-        let mut headers = BTreeMap::new();
-        headers.insert("Content-Type".to_string(), "text/html".to_string());
-        headers.insert("Content-Length".to_string(), PAGE_INDEX.len().to_string());
+        Routes::init(request)
+        .route("GET", "/", |_request, _args| {
+            let mut headers = BTreeMap::new();
+            headers.insert("Content-Type".to_string(), "text/html".to_string());
+            headers.insert("Content-Length".to_string(), PAGE_INDEX.len().to_string());
 
-        Response::new(
-            httpd::Status::OK,
-            headers,
-            PAGE_INDEX.as_bytes().to_vec()
-        )
+            Response::new(
+                httpd::Status::OK,
+                headers,
+                PAGE_INDEX.as_bytes().to_vec()
+            )
+        })
+        .catch_all(|_request, _args| {
+            let mut headers = BTreeMap::new();
+            headers.insert("Content-Type".to_string(), "text/html".to_string());
+            headers.insert("Content-Length".to_string(), PAGE_NOTFOUND.len().to_string());
+
+            Response::new(
+                httpd::Status::NotFound,
+                headers,
+                PAGE_NOTFOUND.as_bytes().to_vec()
+            )
+        })
     });
 
     loop {
