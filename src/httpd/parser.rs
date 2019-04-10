@@ -39,6 +39,7 @@ impl HTTPParser {
             .and_then(|_| self.parse_version())
             .and_then(|_| self.expect("\r\n"))
             .and_then(|_| self.parse_headers())
+            .and_then(|_| self.expect("\r\n"))
             .and_then(|_| {
                 Ok(Request::new(
                     self.method.to_owned().unwrap(),
