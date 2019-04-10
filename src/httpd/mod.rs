@@ -244,12 +244,18 @@ impl HTTPD {
                         .expect("Could not send head line");
 
                     for (key, value) in response.headers {
-                        socket.send_slice(format!("{}: {}\r\n", key, value).as_bytes()).expect("Could not send header");
+                        socket
+                            .send_slice(format!("{}: {}\r\n", key, value).as_bytes())
+                            .expect("Could not send header");
                     }
 
-                    socket.send_slice("\r\n".as_bytes()).expect("Could not send end-of-header");
+                    socket
+                        .send_slice("\r\n".as_bytes())
+                        .expect("Could not send end-of-header");
 
-                    socket.send_slice(&response.body).expect("Could not send body");;
+                    socket
+                        .send_slice(&response.body)
+                        .expect("Could not send body");;
                 }
                 _ => warn!("Request not read"),
             }

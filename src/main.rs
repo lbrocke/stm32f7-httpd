@@ -12,24 +12,20 @@ extern crate alloc;
 mod httpd;
 mod logger;
 
-use alloc::{
-    collections::BTreeMap,
-    vec::Vec,
-    string::ToString,
-};
+use alloc::{collections::BTreeMap, string::ToString, vec::Vec};
 use alloc_cortex_m::CortexMHeap;
 use core::alloc::Layout as AllocLayout;
 use core::panic::PanicInfo;
 use cortex_m::asm;
 use cortex_m_rt::{entry, exception};
+use httpd::{Request, Response, HTTPD};
+use log::{error, info};
 use smoltcp::wire::{EthernetAddress, IpAddress, Ipv4Address};
 use stm32f7::stm32f7x6::{CorePeripherals, Peripherals};
 use stm32f7_discovery::gpio::{GpioPort, OutputPin};
 use stm32f7_discovery::init;
 use stm32f7_discovery::lcd::{self, Color};
 use stm32f7_discovery::system_clock::{self, Hz};
-use httpd::{HTTPD, Request, Response};
-use log::{info, error};
 
 const SYSTICK: Hz = Hz(20);
 
@@ -118,18 +114,28 @@ fn main() -> ! {
 
     // set up routes
     server.routes(&|request: &Request, body: &Vec<u8>| {
-        info!("Got {} request on path {}", request.method(), request.path());
+        info!(
+            "Got {} request on path {}",
+            request.method(),
+            request.path()
+        );
 
         match (request.method(), request.path()) {
             ("GET", "/") => {
                 let mut headers = BTreeMap::new();
-                headers.insert("Server".to_string(), format!("{}/{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")));
+                headers.insert(
+                    "Server".to_string(),
+                    format!("{}/{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
+                );
                 headers.insert("Content-Type".to_string(), "text/html".to_string());
-                headers.insert("Content-Length".to_string(), format!("{}", PAGE_SOURCE.len()));
+                headers.insert(
+                    "Content-Length".to_string(),
+                    format!("{}", PAGE_SOURCE.len()),
+                );
 
                 Response::new(httpd::Status::OK, headers, PAGE_SOURCE.as_bytes().to_vec())
             }
-            _ => Response::new(httpd::Status::NotFound, BTreeMap::new(), vec![])
+            _ => Response::new(httpd::Status::NotFound, BTreeMap::new(), vec![]),
         }
     });
 
