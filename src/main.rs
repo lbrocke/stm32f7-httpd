@@ -23,13 +23,13 @@ use log::{debug, error, info};
 use smoltcp::wire::{EthernetAddress, IpAddress, Ipv4Address};
 use stm32f7::stm32f7x6::{CorePeripherals, Peripherals};
 use stm32f7_discovery::gpio::{GpioPort, OutputPin};
-use stm32f7_discovery::{init, touch};
 use stm32f7_discovery::lcd::{self, Color, Framebuffer, Layer};
 use stm32f7_discovery::system_clock::{self, Hz};
+use stm32f7_discovery::{init, touch};
 
 use httpd::{Request, ResponseBuilder, Routes, Status, HTTPD};
 
-const SYSTICK: Hz = Hz(20);
+const SYSTICK: Hz = Hz(100);
 
 const HEAP_SIZE: usize = 50 * 1024;
 
@@ -98,7 +98,7 @@ fn main() -> ! {
     // set stdout to layer 2
     lcd::init_stdout(layer_2);
 
-    logger::init().unwrap();
+    // logger::init().unwrap();
 
     unsafe { ALLOCATOR.init(cortex_m_rt::heap_start() as usize, HEAP_SIZE) }
 
@@ -169,12 +169,10 @@ fn main() -> ! {
                 let mut body_iter = body.iter();
 
                 while let (Some(x), Some(y)) = (body_iter.next(), body_iter.next()) {
-                    debug!("Setting ({}|{})", x, y);
                     draw_pixel(&mut layer_wrapper.borrow_mut(), *x as usize, *y as usize);
                 }
 
                 let mut pixel_data = vec![];
-                
                 for (x, y) in new_pixels.borrow().iter() {
                     pixel_data.push(*x);
                     pixel_data.push(*y);
@@ -187,6 +185,12 @@ fn main() -> ! {
 
                 new_pixels.borrow_mut().clear();
                 res
+            })
+            .route("POST", "/pixels/clear", |_req, _args| {
+                new_pixels.borrow_mut().clear();
+                layer_wrapper.borrow_mut().clear();
+
+                ResponseBuilder::new(Status::OK).finalize()
             })
             .catch_all(|_req, _args| {
                 ResponseBuilder::new(Status::NotFound)
@@ -238,7 +242,11 @@ fn main() -> ! {
         for touch_event in &touch::touches(&mut i2c_3).expect("Could not read touch events") {
             let px_x = touch_event.x / 4;
             let px_y = touch_event.y / 4;
-            draw_pixel(&mut layer_wrapper.borrow_mut(), px_x as usize, px_y as usize);
+            draw_pixel(
+                &mut layer_wrapper.borrow_mut(),
+                px_x as usize,
+                px_y as usize,
+            );
 
             let px = (px_x as u8, px_y as u8);
 
