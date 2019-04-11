@@ -1,7 +1,9 @@
 [package]
 name = "stm32f7-httpd"
 version = "0.1.0"
-authors = ["Lukas Brocke <lukas@brocke.net>"]
+authors = ["Paul Brinkmeier <paul.brinkmeier@gmail.com>",
+           "Lukas Brocke <lukas@brocke.net>",
+           "Jan Ellmers <jan.ellmers@yahoo.de>"]
 edition = "2018"
 description = "A simple HTTP server for the STM32F7-Discovery board"
 
