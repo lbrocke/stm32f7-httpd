@@ -12,20 +12,21 @@ extern crate alloc;
 mod httpd;
 mod logger;
 
-use alloc::{collections::BTreeMap, string::ToString, vec::Vec};
+use alloc::{str, vec::Vec};
 use alloc_cortex_m::CortexMHeap;
 use core::alloc::Layout as AllocLayout;
 use core::panic::PanicInfo;
 use cortex_m::asm;
 use cortex_m_rt::{entry, exception};
-use httpd::{Request, Response, HTTPD};
-use log::{error, info, debug};
+use log::{debug, error, info};
 use smoltcp::wire::{EthernetAddress, IpAddress, Ipv4Address};
 use stm32f7::stm32f7x6::{CorePeripherals, Peripherals};
 use stm32f7_discovery::gpio::{GpioPort, OutputPin};
 use stm32f7_discovery::init;
 use stm32f7_discovery::lcd::{self, Color};
 use stm32f7_discovery::system_clock::{self, Hz};
+
+use httpd::{Request, ResponseBuilder, Routes, Status, HTTPD};
 
 const SYSTICK: Hz = Hz(20);
 
@@ -35,7 +36,8 @@ const ETH_ADDR: EthernetAddress = EthernetAddress([0x00, 0x08, 0xDC, 0xAB, 0xCD,
 const IP_ADDR: IpAddress = IpAddress::Ipv4(Ipv4Address([192, 168, 1, 42]));
 const PORT: u16 = 80;
 
-const PAGE_SOURCE: &str = include_str!("httpd/index.html");
+const INDEX_PAGE: &str = include_str!("httpd/index.html");
+const NOTFOUND_PAGE: &str = include_str!("httpd/notfound.html");
 
 #[entry]
 fn main() -> ! {
@@ -99,6 +101,62 @@ fn main() -> ! {
 
     unsafe { ALLOCATOR.init(cortex_m_rt::heap_start() as usize, HEAP_SIZE) }
 
+    // Gets called on each request
+
+    let mut request_handler = |req: &Request, body: &Vec<u8>| {
+        Routes::init(req)
+            // Frontend route
+            .route("GET", "/", |_req, _args| {
+                ResponseBuilder::new(Status::OK)
+                    .body_html(INDEX_PAGE)
+                    .finalize()
+            })
+            // API routes
+            .route("GET", "/pins", |_req, _args| {
+                let pins_body = format!("{{\"led\": {}}}\n", pins.led.get());
+
+                ResponseBuilder::new(Status::OK)
+                    .header("Content-Type", "application/json")
+                    .body(pins_body.as_bytes().to_vec())
+                    .finalize()
+            })
+            .route("POST", "/pins/:name", |_req, args| {
+                let pin_to_toggle: Option<&mut OutputPin> = match args.get("name").unwrap().as_str() {
+                    "led" => Some(&mut pins.led),
+                    "backlight" => Some(&mut pins.backlight),
+                    "display_enable" => Some(&mut pins.display_enable),
+                    _ => None
+                };
+
+                let state_to_set =
+                    str::from_utf8(body)
+                    .ok()
+                    .and_then(|state_string| {
+                        if state_string == "1" {
+                            Some(true)
+                        } else if state_string == "0" {
+                            Some(false)
+                        } else {
+                            None
+                        }
+                    });
+
+                match (pin_to_toggle, state_to_set) {
+                    (Some(pin), Some(state)) => {
+                        pin.set(state);
+                        ResponseBuilder::new(Status::OK)
+                            .finalize()
+                    },
+                    _ => ResponseBuilder::new(Status::BadRequest).finalize(),
+                }
+            })
+            .catch_all(|_req, _args| {
+                ResponseBuilder::new(Status::NotFound)
+                    .body_html(NOTFOUND_PAGE)
+                    .finalize()
+            })
+    };
+
     let mut server = HTTPD::new(
         &mut rcc,
         &mut syscfg,
@@ -107,31 +165,17 @@ fn main() -> ! {
         ETH_ADDR,
         IP_ADDR,
         PORT,
-        |request: &Request, body: &Vec<u8>| {
-            info!(
-                "Got {} request on path {}",
-                request.method(),
-                request.path()
-            );
+        |req: &Request, body: &Vec<u8>| {
+            let res = request_handler(req, body);
+            let req_text = format!("{} {}", req.method(), req.path());
+            let (status_num, status_txt) = res.status.numerical_and_text();
+            let res_text = format!("[{} {}]", status_num, status_txt);
+            let empty_space = 50 - req_text.len() - res_text.len();
 
-            match (request.method(), request.path()) {
-                ("GET", "/") => {
-                    let mut headers = BTreeMap::new();
-                    headers.insert(
-                        "Server".to_string(),
-                        format!("{}/{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
-                    );
-                    headers.insert("Content-Type".to_string(), "text/html".to_string());
-                    headers.insert(
-                        "Content-Length".to_string(),
-                        format!("{}", PAGE_SOURCE.len()),
-                    );
+            info!("{}{}{}", req_text, " ".repeat(empty_space), res_text);
 
-                    Response::new(httpd::Status::OK, headers, PAGE_SOURCE.as_bytes().to_vec())
-                }
-                _ => Response::new(httpd::Status::NotFound, BTreeMap::new(), vec![]),
-            }
-        }
+            res
+        },
     )
     .expect("HTTPD initialisation failed");
 

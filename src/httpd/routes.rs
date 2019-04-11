@@ -1,12 +1,12 @@
+use super::request::Request;
 use alloc::{
     collections::BTreeMap,
-    string::{String, ToString}
+    string::{String, ToString},
 };
-use super::request::Request;
 
 pub enum Routes<'a, R> {
     NotMatched(&'a Request),
-    Matched(R)
+    Matched(R),
 }
 
 impl<'a, R> Routes<'a, R> {
@@ -14,7 +14,12 @@ impl<'a, R> Routes<'a, R> {
         Routes::NotMatched(request)
     }
 
-    pub fn route<F: FnOnce(&'a Request, BTreeMap<String, String>) -> R>(self, method: &str, pattern: &str, make_response: F) -> Routes<'a, R> {
+    pub fn route<F: FnOnce(&'a Request, BTreeMap<String, String>) -> R>(
+        self,
+        method: &str,
+        pattern: &str,
+        make_response: F,
+    ) -> Routes<'a, R> {
         match self {
             Routes::Matched(result) => Routes::Matched(result),
             Routes::NotMatched(request) => {
@@ -23,7 +28,7 @@ impl<'a, R> Routes<'a, R> {
 
                     match matched_path {
                         None => Routes::NotMatched(request),
-                        Some(args) => Routes::Matched(make_response(request, args))
+                        Some(args) => Routes::Matched(make_response(request, args)),
                     }
                 } else {
                     Routes::NotMatched(request)
@@ -32,10 +37,13 @@ impl<'a, R> Routes<'a, R> {
         }
     }
 
-    pub fn catch_all<F: FnOnce(&'a Request, BTreeMap<String, String>) -> R>(self, make_response: F) -> R {
+    pub fn catch_all<F: FnOnce(&'a Request, BTreeMap<String, String>) -> R>(
+        self,
+        make_response: F,
+    ) -> R {
         match self {
             Routes::Matched(result) => result,
-            Routes::NotMatched(request) => make_response(request, BTreeMap::new())
+            Routes::NotMatched(request) => make_response(request, BTreeMap::new()),
         }
     }
 }
@@ -53,13 +61,16 @@ fn match_path(pattern: &str, path: &str) -> Option<BTreeMap<String, String>> {
             // If both still have a part, compare them and look for variables (starting with ":")
             (Some(pattern_part), Some(path_part)) => {
                 if pattern_part.len() >= 2 && pattern_part.split_at(1).0 == ":" {
-                    args.insert((pattern_part.split_at(1).1).to_string(), path_part.to_string());
+                    args.insert(
+                        (pattern_part.split_at(1).1).to_string(),
+                        path_part.to_string(),
+                    );
                 } else if pattern_part != path_part {
-                    return None
+                    return None;
                 }
-            },
+            }
             // Otherwise, fail horribly
-            _ => return None
+            _ => return None,
         }
     }
 }

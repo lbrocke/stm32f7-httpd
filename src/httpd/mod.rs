@@ -1,7 +1,7 @@
 //! HTTP Server Module
 
-use alloc::{borrow::ToOwned, collections::BTreeMap,format, string::String, vec::Vec};
-use log::{debug, info, warn};
+use alloc::{borrow::ToOwned, collections::BTreeMap, format, string::String, vec::Vec};
+use log::{debug, trace};
 use smoltcp::iface::{EthernetInterface, EthernetInterfaceBuilder, NeighborCache};
 use smoltcp::socket::{SocketHandle, SocketSet, TcpSocket, TcpSocketBuffer};
 use smoltcp::time::Instant;
@@ -13,7 +13,7 @@ use stm32f7_discovery::{self, system_clock};
 mod request;
 pub use self::request::Request;
 mod response;
-pub use self::response::Response;
+pub use self::response::{Response, ResponseBuilder};
 mod status;
 pub use self::status::Status;
 mod routes;
@@ -42,7 +42,7 @@ impl<F: FnMut(&Request, &Vec<u8>) -> Response> HTTPD<F> {
         ethernet_addr: EthernetAddress,
         ip_addr: IpAddress,
         port: u16,
-        routes_callback: F
+        routes_callback: F,
     ) -> Result<Self, PhyError> {
         ethernet::EthernetDevice::new(
             Default::default(),
@@ -80,7 +80,7 @@ impl<F: FnMut(&Request, &Vec<u8>) -> Response> HTTPD<F> {
                 connected: false,
                 input_buffer: vec![],
                 request_state: RequestState::Wait,
-                routes_callback
+                routes_callback,
             }
         })
     }
@@ -230,8 +230,7 @@ impl<F: FnMut(&Request, &Vec<u8>) -> Response> HTTPD<F> {
                     debug!("Body:");
                     debug!("{:?}", body);
 
-                    let response =
-                        (self.routes_callback)(request, body);
+                    let response = (self.routes_callback)(request, body);
                     let (status_num, status_text) = response.status.numerical_and_text();
 
                     socket
@@ -239,6 +238,8 @@ impl<F: FnMut(&Request, &Vec<u8>) -> Response> HTTPD<F> {
                             format!("HTTP/1.1 {} {}\r\n", status_num, status_text).as_bytes(),
                         )
                         .expect("Could not send head line");
+
+                    trace!("Sending headers: {:?}", response.headers);
 
                     for (key, value) in response.headers {
                         socket
@@ -249,6 +250,8 @@ impl<F: FnMut(&Request, &Vec<u8>) -> Response> HTTPD<F> {
                     socket
                         .send_slice("\r\n".as_bytes())
                         .expect("Could not send end-of-header");
+
+                    trace!("Sending body: {:?}", response.body);
 
                     socket
                         .send_slice(&response.body)

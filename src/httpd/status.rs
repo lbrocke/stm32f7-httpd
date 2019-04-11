@@ -4,6 +4,7 @@ pub enum Status {
     OK,
 
     // 400
+    BadRequest,
     NotFound,
 }
 
@@ -12,7 +13,8 @@ impl Status {
         match self {
             Status::OK => (200, "OK"),
 
-            Status::NotFound => (404, "Not found"),
+            Status::BadRequest => (400, "Bad Request"),
+            Status::NotFound => (404, "Not Found"),
         }
     }
 }

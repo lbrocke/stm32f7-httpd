@@ -11,31 +11,18 @@ use alloc::{
     string::{String, ToString},
 };
 use alloc_cortex_m::CortexMHeap;
-use core::{
-    alloc::Layout,
-    panic::PanicInfo,
-};
+use core::{alloc::Layout, panic::PanicInfo};
 use cortex_m_rt::{entry, exception};
+use smoltcp::wire::{EthernetAddress, IpAddress, Ipv4Address};
 use stm32f7::stm32f7x6::{CorePeripherals, Peripherals};
 use stm32f7_discovery::{
-    print,
-    println,
     gpio::{GpioPort, OutputPin},
     init,
     lcd::{self, Color},
-    system_clock::{self, Hz}
+    print, println,
+    system_clock::{self, Hz},
 };
-use stm32f7_httpd::httpd::{
-    self,
-    Request,
-    Response,
-    Routes
-};
-use smoltcp::wire::{
-    EthernetAddress,
-    IpAddress,
-    Ipv4Address
-};
+use stm32f7_httpd::httpd::{self, Request, Response, Routes};
 
 const SYSTICK_FREQ: Hz = Hz(20);
 const HEAP_SIZE: usize = 50 * 1024;
@@ -126,56 +113,50 @@ fn main() -> ! {
             println!("Got {} request on {}", request.method(), request.path());
 
             Routes::init(request)
-            .route("GET", "/", |_request, _args| {
-                let mut links = String::new();
-                for (key, _content) in pages.iter() {
-                    links.push_str(&format!("<li><a href=\"/view/{}\">{}</a></li>", key, key));
-                }
-                let source = PAGE_INDEX.replace("{{links}}", &links);
-
-                let mut headers = BTreeMap::new();
-                headers.insert("Content-Type".to_string(), "text/html".to_string());
-                headers.insert("Content-Length".to_string(), source.len().to_string());
-
-                Response::new(
-                    httpd::Status::OK,
-                    headers,
-                    source.as_bytes().to_vec()
-                )
-            })
-            .route("GET", "/view/:page_name", |_request, args| {
-                let source = match pages.get(args.get("page_name").unwrap().as_str()) {
-                    None => PAGE_NOTFOUND.to_string(),
-                    Some(content) => {
-                        PAGE_VIEW
-                            .replace("{{title}}", args.get("page_name").unwrap())
-                            .replace("{{content}}", content)
+                .route("GET", "/", |_request, _args| {
+                    let mut links = String::new();
+                    for (key, _content) in pages.iter() {
+                        links.push_str(&format!("<li><a href=\"/view/{}\">{}</a></li>", key, key));
                     }
-                };
+                    let source = PAGE_INDEX.replace("{{links}}", &links);
 
-                let mut headers = BTreeMap::new();
-                headers.insert("Content-Type".to_string(), "text/html".to_string());
-                headers.insert("Content-Length".to_string(), source.len().to_string());
+                    let mut headers = BTreeMap::new();
+                    headers.insert("Content-Type".to_string(), "text/html".to_string());
+                    headers.insert("Content-Length".to_string(), source.len().to_string());
 
-                Response::new(
-                    httpd::Status::OK,
-                    headers,
-                    source.as_bytes().to_vec()
-                )
-            })
-            .catch_all(|_request, _args| {
-                let mut headers = BTreeMap::new();
-                headers.insert("Content-Type".to_string(), "text/html".to_string());
-                headers.insert("Content-Length".to_string(), PAGE_NOTFOUND.len().to_string());
+                    Response::new(httpd::Status::OK, headers, source.as_bytes().to_vec())
+                })
+                .route("GET", "/view/:page_name", |_request, args| {
+                    let source = match pages.get(args.get("page_name").unwrap().as_str()) {
+                        None => PAGE_NOTFOUND.to_string(),
+                        Some(content) => PAGE_VIEW
+                            .replace("{{title}}", args.get("page_name").unwrap())
+                            .replace("{{content}}", content),
+                    };
 
-                Response::new(
-                    httpd::Status::NotFound,
-                    headers,
-                    PAGE_NOTFOUND.as_bytes().to_vec()
-                )
-            })
-        }
-    ).expect("Could not initialize HTTPD");
+                    let mut headers = BTreeMap::new();
+                    headers.insert("Content-Type".to_string(), "text/html".to_string());
+                    headers.insert("Content-Length".to_string(), source.len().to_string());
+
+                    Response::new(httpd::Status::OK, headers, source.as_bytes().to_vec())
+                })
+                .catch_all(|_request, _args| {
+                    let mut headers = BTreeMap::new();
+                    headers.insert("Content-Type".to_string(), "text/html".to_string());
+                    headers.insert(
+                        "Content-Length".to_string(),
+                        PAGE_NOTFOUND.len().to_string(),
+                    );
+
+                    Response::new(
+                        httpd::Status::NotFound,
+                        headers,
+                        PAGE_NOTFOUND.as_bytes().to_vec(),
+                    )
+                })
+        },
+    )
+    .expect("Could not initialize HTTPD");
 
     println!("Server initialized on {}:{}", IP_ADDRESS, PORT);
 
@@ -204,7 +185,7 @@ fn out_of_memory(_: Layout) -> ! {
 
 // What to do on a panic
 #[panic_handler]
-fn panic(info: &PanicInfo) -> !{
+fn panic(info: &PanicInfo) -> ! {
     println!("Panic: {:?}", info);
     loop {}
 }
