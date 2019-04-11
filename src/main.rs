@@ -12,7 +12,7 @@ extern crate alloc;
 mod httpd;
 mod logger;
 
-use alloc::{str, vec::Vec};
+use alloc::{str, string::ToString, vec::Vec};
 use alloc_cortex_m::CortexMHeap;
 use core::alloc::Layout as AllocLayout;
 use core::panic::PanicInfo;
@@ -166,7 +166,10 @@ fn main() -> ! {
         IP_ADDR,
         PORT,
         |req: &Request, body: &Vec<u8>| {
-            let res = request_handler(req, body);
+            let mut res = request_handler(req, body);
+            res.headers.insert("Access-Control-Allow-Origin".to_string(), "*".to_string());
+            res.headers.insert("Server".to_string(), format!("{}/{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")));
+
             let req_text = format!("{} {}", req.method(), req.path());
             let (status_num, status_txt) = res.status.numerical_and_text();
             let res_text = format!("[{} {}]", status_num, status_txt);
