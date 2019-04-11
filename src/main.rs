@@ -113,7 +113,12 @@ fn main() -> ! {
             })
             // API routes
             .route("GET", "/pins", |_req, _args| {
-                let pins_body = format!("{{\"led\": {}}}\n", pins.led.get());
+                let pins_body =
+                    format!("{{ \"led\": {led}, \"backlight\": {backlight}, \"display_enable\": {display_enable} }}\n",
+                        led = pins.led.get(),
+                        backlight = pins.backlight.get(),
+                        display_enable = pins.display_enable.get()
+                    );
 
                 ResponseBuilder::new(Status::OK)
                     .header("Content-Type", "application/json")
@@ -167,8 +172,12 @@ fn main() -> ! {
         PORT,
         |req: &Request, body: &Vec<u8>| {
             let mut res = request_handler(req, body);
-            res.headers.insert("Access-Control-Allow-Origin".to_string(), "*".to_string());
-            res.headers.insert("Server".to_string(), format!("{}/{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")));
+            res.headers
+                .insert("Access-Control-Allow-Origin".to_string(), "*".to_string());
+            res.headers.insert(
+                "Server".to_string(),
+                format!("{}/{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
+            );
 
             let req_text = format!("{} {}", req.method(), req.path());
             let (status_num, status_txt) = res.status.numerical_and_text();
