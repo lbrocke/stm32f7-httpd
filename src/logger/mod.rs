@@ -40,8 +40,6 @@ extern crate log;
 
 use alloc::string::String;
 use alloc::vec::Vec;
-//use core::fmt::Write;
-//use cortex_m_semihosting::hio;
 use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
 use stm32f7_discovery::{lcd, print, println, system_clock};
 
@@ -77,12 +75,15 @@ impl log::Log for Stm32f7Logger {
 
         let message = format!("{}{}", lvl, record.args());
 
-        // print to host stdout
-        /*
+        // print to host stdout (when not running in release
+        #[cfg(debug_assertions)]
+        {
+            use core::fmt::Write;
+            use cortex_m_semihosting::hio;
             if let Ok(mut hstdout) = hio::hstdout() {
                 let _ = writeln!(hstdout, "{}{}", prefix, message);
             }
-        */
+        }
 
         // print to LCD
         if lcd::stdout::is_initialized() {
