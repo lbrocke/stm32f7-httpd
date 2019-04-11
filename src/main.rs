@@ -23,7 +23,7 @@ use smoltcp::wire::{EthernetAddress, IpAddress, Ipv4Address};
 use stm32f7::stm32f7x6::{CorePeripherals, Peripherals};
 use stm32f7_discovery::gpio::{GpioPort, OutputPin};
 use stm32f7_discovery::init;
-use stm32f7_discovery::lcd::{self, Color};
+use stm32f7_discovery::lcd::{self, Color, Framebuffer, Layer};
 use stm32f7_discovery::system_clock::{self, Hz};
 
 use httpd::{Request, ResponseBuilder, Routes, Status, HTTPD};
@@ -155,6 +155,16 @@ fn main() -> ! {
                     _ => ResponseBuilder::new(Status::BadRequest).finalize(),
                 }
             })
+            .route("POST", "/pixels", |_req, _args| {
+                let mut body_iter = body.iter();
+
+                while let (Some(x), Some(y)) = (body_iter.next(), body_iter.next()) {
+                    debug!("Setting ({}|{})", x, y);
+                    draw_pixel(&mut layer_1, *x as usize, *y as usize);
+                }
+
+                ResponseBuilder::new(Status::OK).finalize()
+            })
             .catch_all(|_req, _args| {
                 ResponseBuilder::new(Status::NotFound)
                     .body_html(NOTFOUND_PAGE)
@@ -170,6 +180,8 @@ fn main() -> ! {
         ETH_ADDR,
         IP_ADDR,
         PORT,
+        // server "middleware"
+        // sets CORS headers, Server header and prints a nice message
         |req: &Request, body: &Vec<u8>| {
             let mut res = request_handler(req, body);
             res.headers
@@ -200,6 +212,24 @@ fn main() -> ! {
         server.poll();
     }
 }
+
+fn draw_pixel<T: Framebuffer>(layer: &mut Layer<T>, x: usize, y: usize) {
+    let w = lcd::WIDTH;
+    let h = lcd::HEIGHT;
+
+    let max_x = w / 4;
+    let max_y = h / 4;
+
+    if x < max_x && y < max_y {
+        for j in 0..4 {
+            for i in 0..4 {
+                layer.print_point_color_at(x * 4 + i, y * 4 + j, Color::rgb(0, 0, 0));
+            }
+        }
+    }
+}
+
+// some functions that are required because we're not using std
 
 #[global_allocator]
 static ALLOCATOR: CortexMHeap = CortexMHeap::empty();
