@@ -7,7 +7,8 @@ extern crate alloc;
 
 use alloc::{
     collections::BTreeMap,
-    string::ToString,
+    format,
+    string::{String, ToString},
 };
 use alloc_cortex_m::CortexMHeap;
 use core::{
@@ -44,6 +45,7 @@ const IP_ADDRESS: IpAddress = IpAddress::Ipv4(Ipv4Address([192, 168, 1, 42]));
 const PORT: u16 = 80;
 
 const PAGE_INDEX: &str = include_str!("wiki/index.html");
+const PAGE_VIEW: &str = include_str!("wiki/view.html");
 const PAGE_NOTFOUND: &str = include_str!("wiki/notfound.html");
 
 #[entry]
@@ -107,6 +109,10 @@ fn main() -> ! {
 
     println!("Initializing server...");
 
+    let mut pages = BTreeMap::new();
+
+    pages.insert("stuff", "<p>Hello, <em>World</em>!</p>");
+
     // Initialize server (doesn't really do anything yet)
     let mut server = httpd::HTTPD::new(
         &mut rcc,
@@ -116,37 +122,62 @@ fn main() -> ! {
         ETHER_ADDRESS,
         IP_ADDRESS,
         PORT,
+        |request: &Request, _body| {
+            println!("Got {} request on {}", request.method(), request.path());
+
+            Routes::init(request)
+            .route("GET", "/", |_request, _args| {
+                let mut links = String::new();
+                for (key, _content) in pages.iter() {
+                    links.push_str(&format!("<li><a href=\"/view/{}\">{}</a></li>", key, key));
+                }
+                let source = PAGE_INDEX.replace("{{links}}", &links);
+
+                let mut headers = BTreeMap::new();
+                headers.insert("Content-Type".to_string(), "text/html".to_string());
+                headers.insert("Content-Length".to_string(), source.len().to_string());
+
+                Response::new(
+                    httpd::Status::OK,
+                    headers,
+                    source.as_bytes().to_vec()
+                )
+            })
+            .route("GET", "/view/:page_name", |_request, args| {
+                let source = match pages.get(args.get("page_name").unwrap().as_str()) {
+                    None => PAGE_NOTFOUND.to_string(),
+                    Some(content) => {
+                        PAGE_VIEW
+                            .replace("{{title}}", args.get("page_name").unwrap())
+                            .replace("{{content}}", content)
+                    }
+                };
+
+                let mut headers = BTreeMap::new();
+                headers.insert("Content-Type".to_string(), "text/html".to_string());
+                headers.insert("Content-Length".to_string(), source.len().to_string());
+
+                Response::new(
+                    httpd::Status::OK,
+                    headers,
+                    source.as_bytes().to_vec()
+                )
+            })
+            .catch_all(|_request, _args| {
+                let mut headers = BTreeMap::new();
+                headers.insert("Content-Type".to_string(), "text/html".to_string());
+                headers.insert("Content-Length".to_string(), PAGE_NOTFOUND.len().to_string());
+
+                Response::new(
+                    httpd::Status::NotFound,
+                    headers,
+                    PAGE_NOTFOUND.as_bytes().to_vec()
+                )
+            })
+        }
     ).expect("Could not initialize HTTPD");
 
     println!("Server initialized on {}:{}", IP_ADDRESS, PORT);
-
-    server.routes(&|request: &Request, _body| {
-        println!("Got {} request on {}", request.method(), request.path());
-
-        Routes::init(request)
-        .route("GET", "/", |_request, _args| {
-            let mut headers = BTreeMap::new();
-            headers.insert("Content-Type".to_string(), "text/html".to_string());
-            headers.insert("Content-Length".to_string(), PAGE_INDEX.len().to_string());
-
-            Response::new(
-                httpd::Status::OK,
-                headers,
-                PAGE_INDEX.as_bytes().to_vec()
-            )
-        })
-        .catch_all(|_request, _args| {
-            let mut headers = BTreeMap::new();
-            headers.insert("Content-Type".to_string(), "text/html".to_string());
-            headers.insert("Content-Length".to_string(), PAGE_NOTFOUND.len().to_string());
-
-            Response::new(
-                httpd::Status::NotFound,
-                headers,
-                PAGE_NOTFOUND.as_bytes().to_vec()
-            )
-        })
-    });
 
     loop {
         // Poll for packets and handle 'em

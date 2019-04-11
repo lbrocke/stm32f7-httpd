@@ -107,39 +107,37 @@ fn main() -> ! {
         ETH_ADDR,
         IP_ADDR,
         PORT,
+        |request: &Request, body: &Vec<u8>| {
+            info!(
+                "Got {} request on path {}",
+                request.method(),
+                request.path()
+            );
+
+            match (request.method(), request.path()) {
+                ("GET", "/") => {
+                    let mut headers = BTreeMap::new();
+                    headers.insert(
+                        "Server".to_string(),
+                        format!("{}/{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
+                    );
+                    headers.insert("Content-Type".to_string(), "text/html".to_string());
+                    headers.insert(
+                        "Content-Length".to_string(),
+                        format!("{}", PAGE_SOURCE.len()),
+                    );
+
+                    Response::new(httpd::Status::OK, headers, PAGE_SOURCE.as_bytes().to_vec())
+                }
+                _ => Response::new(httpd::Status::NotFound, BTreeMap::new(), vec![]),
+            }
+        }
     )
     .expect("HTTPD initialisation failed");
 
     info!("Server initialized on {}:{}", IP_ADDR, PORT);
 
-    // set up routes
-    server.routes(&|request: &Request, _body: &Vec<u8>| {
-        info!(
-            "Got {} request on path {}",
-            request.method(),
-            request.path()
-        );
-
-        match (request.method(), request.path()) {
-            ("GET", "/") => {
-                let mut headers = BTreeMap::new();
-                headers.insert(
-                    "Server".to_string(),
-                    format!("{}/{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
-                );
-                headers.insert("Content-Type".to_string(), "text/html".to_string());
-                headers.insert(
-                    "Content-Length".to_string(),
-                    format!("{}", PAGE_SOURCE.len()),
-                );
-
-                Response::new(httpd::Status::OK, headers, PAGE_SOURCE.as_bytes().to_vec())
-            }
-            _ => Response::new(httpd::Status::NotFound, BTreeMap::new(), vec![]),
-        }
-    });
-
-    debug!("Entering loop");
+    info!("Entering loop");
 
     loop {
         // poll packets and answer them

@@ -1,7 +1,7 @@
 //! HTTP Server Module
 
-use alloc::{borrow::ToOwned, collections::BTreeMap, string::String, vec::Vec};
-use log::{debug, trace};
+use alloc::{borrow::ToOwned, collections::BTreeMap,format, string::String, vec::Vec};
+use log::{debug, info, warn};
 use smoltcp::iface::{EthernetInterface, EthernetInterfaceBuilder, NeighborCache};
 use smoltcp::socket::{SocketHandle, SocketSet, TcpSocket, TcpSocketBuffer};
 use smoltcp::time::Instant;
@@ -22,18 +22,18 @@ pub use self::routes::Routes;
 mod parser;
 use parser::{HTTPParser, ParseError};
 
-pub struct HTTPD {
+pub struct HTTPD<F> {
     ethernet_interface: EthernetInterface<'static, 'static, 'static, ethernet::EthernetDevice>,
     sockets: SocketSet<'static, 'static, 'static>,
     tcp_handle: SocketHandle,
     port: u16,
     connected: bool,
-    routes_callback: Option<&'static Fn(&Request, &Vec<u8>) -> Response>,
     input_buffer: Vec<u8>,
     request_state: RequestState,
+    routes_callback: F,
 }
 
-impl HTTPD {
+impl<F: FnMut(&Request, &Vec<u8>) -> Response> HTTPD<F> {
     pub fn new(
         rcc: &mut RCC,
         syscfg: &mut SYSCFG,
@@ -42,7 +42,8 @@ impl HTTPD {
         ethernet_addr: EthernetAddress,
         ip_addr: IpAddress,
         port: u16,
-    ) -> Result<HTTPD, PhyError> {
+        routes_callback: F
+    ) -> Result<Self, PhyError> {
         ethernet::EthernetDevice::new(
             Default::default(),
             Default::default(),
@@ -77,15 +78,11 @@ impl HTTPD {
                 tcp_handle,
                 port,
                 connected: false,
-                routes_callback: None,
                 input_buffer: vec![],
                 request_state: RequestState::Wait,
+                routes_callback
             }
         })
-    }
-
-    pub fn routes(&mut self, routes_callback: &'static Fn(&Request, &Vec<u8>) -> Response) {
-        self.routes_callback = Some(routes_callback);
     }
 
     pub fn poll(&mut self) {
@@ -233,10 +230,8 @@ impl HTTPD {
                     debug!("Body:");
                     debug!("{:?}", body);
 
-                    let response = match self.routes_callback {
-                        None => unimplemented!(),
-                        Some(routes_cb) => routes_cb(request, body),
-                    };
+                    let response =
+                        (self.routes_callback)(request, body);
                     let (status_num, status_text) = response.status.numerical_and_text();
 
                     socket
