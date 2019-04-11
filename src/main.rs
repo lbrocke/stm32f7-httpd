@@ -15,6 +15,7 @@ mod logger;
 use alloc::{str, string::ToString, vec::Vec};
 use alloc_cortex_m::CortexMHeap;
 use core::alloc::Layout as AllocLayout;
+use core::cell::RefCell;
 use core::panic::PanicInfo;
 use cortex_m::asm;
 use cortex_m_rt::{entry, exception};
@@ -22,7 +23,7 @@ use log::{debug, error, info};
 use smoltcp::wire::{EthernetAddress, IpAddress, Ipv4Address};
 use stm32f7::stm32f7x6::{CorePeripherals, Peripherals};
 use stm32f7_discovery::gpio::{GpioPort, OutputPin};
-use stm32f7_discovery::init;
+use stm32f7_discovery::{init, touch};
 use stm32f7_discovery::lcd::{self, Color, Framebuffer, Layer};
 use stm32f7_discovery::system_clock::{self, Hz};
 
@@ -101,6 +102,15 @@ fn main() -> ! {
 
     unsafe { ALLOCATOR.init(cortex_m_rt::heap_start() as usize, HEAP_SIZE) }
 
+    // Initialize I2C and touch
+    let mut i2c_3 = init::init_i2c_3(peripherals.I2C3, &mut rcc);
+    touch::check_family_id(&mut i2c_3).expect("Could not initialize touch");
+
+    // Wrap layer 1 so it can be used in request_handler and touch handler
+    let layer_wrapper = RefCell::new(layer_1);
+    // Pixels to send next time the client polls
+    let new_pixels = RefCell::new(vec![]);
+
     // Gets called on each request
 
     let mut request_handler = |req: &Request, body: &Vec<u8>| {
@@ -160,10 +170,23 @@ fn main() -> ! {
 
                 while let (Some(x), Some(y)) = (body_iter.next(), body_iter.next()) {
                     debug!("Setting ({}|{})", x, y);
-                    draw_pixel(&mut layer_1, *x as usize, *y as usize);
+                    draw_pixel(&mut layer_wrapper.borrow_mut(), *x as usize, *y as usize);
                 }
 
-                ResponseBuilder::new(Status::OK).finalize()
+                let mut pixel_data = vec![];
+                
+                for (x, y) in new_pixels.borrow().iter() {
+                    pixel_data.push(*x);
+                    pixel_data.push(*y);
+                }
+
+                let res = ResponseBuilder::new(Status::OK)
+                    .header("Content-Type", "application/octet-stream")
+                    .body(pixel_data)
+                    .finalize();
+
+                new_pixels.borrow_mut().clear();
+                res
             })
             .catch_all(|_req, _args| {
                 ResponseBuilder::new(Status::NotFound)
@@ -210,6 +233,19 @@ fn main() -> ! {
     loop {
         // poll packets and answer them
         server.poll();
+
+        // poll for touch events and draw stuff
+        for touch_event in &touch::touches(&mut i2c_3).expect("Could not read touch events") {
+            let px_x = touch_event.x / 4;
+            let px_y = touch_event.y / 4;
+            draw_pixel(&mut layer_wrapper.borrow_mut(), px_x as usize, px_y as usize);
+
+            let px = (px_x as u8, px_y as u8);
+
+            if !new_pixels.borrow().contains(&px) {
+                new_pixels.borrow_mut().push(px);
+            }
+        }
     }
 }
 
