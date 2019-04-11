@@ -19,7 +19,7 @@ use core::panic::PanicInfo;
 use cortex_m::asm;
 use cortex_m_rt::{entry, exception};
 use httpd::{Request, Response, HTTPD};
-use log::{error, info};
+use log::{error, info, debug};
 use smoltcp::wire::{EthernetAddress, IpAddress, Ipv4Address};
 use stm32f7::stm32f7x6::{CorePeripherals, Peripherals};
 use stm32f7_discovery::gpio::{GpioPort, OutputPin};
@@ -113,7 +113,7 @@ fn main() -> ! {
     info!("My IP: {:?}", IP_ADDR);
 
     // set up routes
-    server.routes(&|request: &Request, body: &Vec<u8>| {
+    server.routes(&|request: &Request, _body: &Vec<u8>| {
         info!(
             "Got {} request on path {}",
             request.method(),
@@ -139,7 +139,7 @@ fn main() -> ! {
         }
     });
 
-    info!("Entering loop");
+    debug!("Entering loop");
 
     loop {
         // poll packets and answer them

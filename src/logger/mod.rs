@@ -40,8 +40,8 @@ extern crate log;
 
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::fmt::Write;
-use cortex_m_semihosting::hio;
+//use core::fmt::Write;
+//use cortex_m_semihosting::hio;
 use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
 use stm32f7_discovery::{lcd, print, println, system_clock};
 

@@ -1,7 +1,7 @@
 //! HTTP Server Module
 
 use alloc::{borrow::ToOwned, collections::BTreeMap, string::String, vec::Vec};
-use log::{debug, info, warn};
+use log::{debug, trace};
 use smoltcp::iface::{EthernetInterface, EthernetInterfaceBuilder, NeighborCache};
 use smoltcp::socket::{SocketHandle, SocketSet, TcpSocket, TcpSocketBuffer};
 use smoltcp::time::Instant;
@@ -105,7 +105,7 @@ impl HTTPD {
     }
 
     fn request_init(&mut self) {
-        info!("Connection opened");
+        debug!("Connection opened");
         self.input_buffer = vec![];
         self.request_state = RequestState::ReadHead;
     }
@@ -121,7 +121,7 @@ impl HTTPD {
             RequestState::ReadBody(request, bytes_to_read) => {
                 self.read_body(request.clone(), *bytes_to_read, read)
             }
-            state => warn!("Can't receive in state {:?}", state),
+            state => trace!("Can't receive in state {:?}", state),
         }
     }
 
@@ -167,23 +167,23 @@ impl HTTPD {
                         }
                     }
                     Err(ParseError::NotEnoughInput) => {
-                        debug!("Request header incomplete");
+                        trace!("Request header incomplete");
                     }
                     Err(ParseError::Fatal) => {
-                        warn!("Could not parse request header");
+                        trace!("Could not parse request header");
                         self.request_state = RequestState::ParseError;
                     }
                 }
             }
             Err(_e) => {
-                warn!("Request header is not UTF-8");
+                trace!("Request header is not UTF-8");
                 self.request_state = RequestState::ParseError;
             }
         }
     }
 
     fn request_close(&self) {
-        info!("Connection closed");
+        debug!("Connection closed");
     }
 
     fn want_receive(&self) -> bool {
@@ -212,7 +212,7 @@ impl HTTPD {
 
         if !socket.is_open() {
             socket.listen(self.port).expect("Could not listen");
-            info!("Listening...");
+            debug!("Listening...");
         }
 
         if socket.may_recv() && want_receive {
@@ -257,7 +257,7 @@ impl HTTPD {
                         .send_slice(&response.body)
                         .expect("Could not send body");;
                 }
-                _ => warn!("Request not read"),
+                _ => trace!("Request not read"),
             }
 
             socket.close();

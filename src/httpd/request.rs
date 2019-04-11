@@ -31,6 +31,7 @@ impl Request {
         &self.path
     }
 
+    #[allow(dead_code)]
     pub fn version(&self) -> &str {
         &self.version
     }
