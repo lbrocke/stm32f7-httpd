@@ -254,7 +254,7 @@ impl<F: FnMut(&Request, &Vec<u8>) -> Response> HTTPD<F> {
 
                     debug!("Sending body");
                     self.request_state = RequestState::SendBody(response.body);
-                },
+                }
                 RequestState::SendBody(body) => {
                     trace!("{} bytes remaining", body.len());
 
@@ -262,11 +262,12 @@ impl<F: FnMut(&Request, &Vec<u8>) -> Response> HTTPD<F> {
                     trace!("{} bytes sent", bytes_sent);
 
                     if bytes_sent < body.len() {
-                        self.request_state = RequestState::SendBody(body.split_at(bytes_sent).1.to_vec());
+                        self.request_state =
+                            RequestState::SendBody(body.split_at(bytes_sent).1.to_vec());
                     } else {
                         socket.close();
                     }
-                },
+                }
                 _ => {
                     debug!("Request not read");
                     socket.close();
