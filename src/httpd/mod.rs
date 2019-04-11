@@ -57,8 +57,7 @@ impl<F: FnMut(&Request, &Vec<u8>) -> Response> HTTPD<F> {
             let ip_addresses = [IpCidr::new(ip_addr, 24)];
 
             let tcp_receive_buffer = TcpSocketBuffer::new(vec![0; ethernet::MTU]);
-            // TODO: send packets in a loop, s/15000/MTU
-            let tcp_send_buffer = TcpSocketBuffer::new(vec![0; 15000]);
+            let tcp_send_buffer = TcpSocketBuffer::new(vec![0; ethernet::MTU]);
             let tcp_socket = TcpSocket::new(tcp_receive_buffer, tcp_send_buffer);
 
             // ARP cache of MAC address => IP address mappings
@@ -182,8 +181,9 @@ impl<F: FnMut(&Request, &Vec<u8>) -> Response> HTTPD<F> {
         }
     }
 
-    fn request_close(&self) {
+    fn request_close(&mut self) {
         debug!("Connection closed");
+        self.request_state = RequestState::Wait;
     }
 
     fn want_receive(&self) -> bool {
@@ -252,16 +252,26 @@ impl<F: FnMut(&Request, &Vec<u8>) -> Response> HTTPD<F> {
                         .send_slice("\r\n".as_bytes())
                         .expect("Could not send end-of-header");
 
-                    trace!("Sending body: {:?}", response.body);
+                    debug!("Sending body");
+                    self.request_state = RequestState::SendBody(response.body);
+                },
+                RequestState::SendBody(body) => {
+                    trace!("{} bytes remaining", body.len());
 
-                    socket
-                        .send_slice(&response.body)
-                        .expect("Could not send body");;
+                    let bytes_sent = socket.send_slice(&body).expect("Could not send body");
+                    trace!("{} bytes sent", bytes_sent);
+
+                    if bytes_sent < body.len() {
+                        self.request_state = RequestState::SendBody(body.split_at(bytes_sent).1.to_vec());
+                    } else {
+                        socket.close();
+                    }
+                },
+                _ => {
+                    debug!("Request not read");
+                    socket.close();
                 }
-                _ => trace!("Request not read"),
             }
-
-            socket.close();
         }
 
         PollStatus::Inactive
@@ -281,5 +291,6 @@ enum RequestState {
     ReadHead,
     ReadBody(Request, usize),
     RequestRead(Request, Vec<u8>),
+    SendBody(Vec<u8>),
     ParseError,
 }
