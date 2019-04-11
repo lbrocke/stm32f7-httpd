@@ -1,10 +1,253 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>Hello, STM32F7!</title>
-    </head>
-    <body>
-        <h1>It works!</h1>
-    </body>
+  <head>
+    <title>STM32F746G-Discovery Status Page</title>
+    <meta charset="utf-8">
+    <style>
+    :root {
+      --color-background: rgb(0, 0, 0);
+      --color-text: rgb(200, 200, 200);
+      --color-text-secondary: rgb(230, 230, 230);
+      /* light theme */
+      --color-background-light: rgb(255, 255, 255);
+      --color-text-light: rgb(0, 0, 0);
+      --color-text-secondary: rgb(160, 160, 160);
+    }
+    html, body {
+      margin: 0;
+      font-family: monospace;
+      font-size: 14px;
+      background-color: var(--color-background);
+      color: var(--color-text);
+      height: 100%;
+    }
+    #light:target {
+      background-color: var(--color-background-light);
+      color: var(--color-text-light);
+    }
+    main {
+      width: 80ch;
+      margin: 0 auto;
+      padding: 50px 0 50px 0;
+    }
+    section {
+      width: 100%;
+      margin: 0 0 80px 0;
+    }
+    div.section-half {
+      width: 50%;
+      float: left;
+    }
+    div.section-half > table {
+      width: 100%;
+    }
+    div.section-half tr {
+      height: 30px;
+    }
+    div.section-half td {
+      height: 100%;
+      vertical-align: middle;
+    }
+    div.section-half tr > td:nth-of-type(1) {
+      float: right;
+    }
+    div.clear {
+      clear: both;
+    }
+    h1 {
+      font-size: 26px;
+      text-align: center;
+      margin-top: 0px;
+      margin-bottom: 40px;
+    }
+    a, a:visited {
+      color: var(--color-secondary);
+      text-decoration: unterline;
+    }
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 50px;
+      height: 26px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #777;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 22px;
+      width: 23px;
+      left: 2px;
+      bottom: 2px;
+      background-color: #fff;
+    }
+    input:checked + .slider {
+      background-color: #ccc;
+    }
+    input:focus + .slider {
+      box-shadow: 0 0 1px #ccc;
+    }
+    input:checked + .slider:before {
+      -webkit-transform: translateX(22px);
+      -ms-transform: translateX(22px);
+      transform: translateX(22px);
+    }
+    canvas {
+      display: block;
+      margin: 0 auto;
+      border: 1px solid var(--color-background);
+    }
+    footer {
+      float: right;
+      color: var(--color-text-secondary);
+    }
+    .text-center {
+      text-align: center;
+      margin: auto;
+    }
+    </style>
+  </head>
+  <body id="light">
+    <main>
+      <h1>STM32F746G-Discovery Status Page</h1>
+
+      <section>
+        <div class="section-half left">
+          <table>
+            <tr><td>GPIOA:</td><td><label class="switch"><input class="gpio" name="a" type="checkbox"><span class="slider"></span></label></td></tr>
+            <tr><td>GPIOB:</td><td><label class="switch"><input class="gpio" name="b" type="checkbox"><span class="slider"></span></label></td></tr>
+            <tr><td>GPIOC:</td><td><label class="switch"><input class="gpio" name="c" type="checkbox"><span class="slider"></span></label></td></tr>
+            <tr><td>GPIOD:</td><td><label class="switch"><input class="gpio" name="d" type="checkbox"><span class="slider"></span></label></td></tr>
+            <tr><td>GPIOE:</td><td><label class="switch"><input class="gpio" name="e" type="checkbox"><span class="slider"></span></label></td></tr>
+            <tr><td>GPIOF:</td><td><label class="switch"><input class="gpio" name="f" type="checkbox"><span class="slider"></span></label></td></tr>
+            <tr><td>backlight:</td><td><label class="switch"><input class="gpio" name="backlight" type="checkbox"><span class="slider"></span></label></td></tr>
+          </table>
+        </div>
+        <div class="section-half">
+          <table>
+            <tr><td><span class="gpio">GPIOG:</td><td><label class="switch"><input class="gpio" name="g" type="checkbox"><span class="slider"></span></label></span></td></tr>
+            <tr><td><span class="gpio">GPIOH:</td><td><label class="switch"><input class="gpio" name="g" type="checkbox"><span class="slider"></span></label></span></td></tr>
+            <tr><td><span class="gpio">GPIOI:</td><td><label class="switch"><input class="gpio" name="i" type="checkbox"><span class="slider"></span></label></span></td></tr>
+            <tr><td><span class="gpio">GPIOJ:</td><td><label class="switch"><input class="gpio" name="j" type="checkbox"><span class="slider"></span></label></span></td></tr>
+            <tr><td><span class="gpio">GPIOK:</td><td><label class="switch"><input class="gpio" name="k" type="checkbox"><span class="slider"></span></label></span></td></tr>
+            <tr><td><span class="gpio">led:</td><td><label class="switch"><input class="gpio" name="led" type="checkbox"><span class="slider"></span></label></span></td></tr>
+            <tr><td><span class="gpio">display:</td><td><label class="switch"><input class="gpio" name="display_enable" type="checkbox"><span class="slider"></span></label></span></td></tr>
+          </table>
+        </div>
+        <div class="clear"></div>
+      </section>
+
+      <section>
+        <p class="text-center">This is a shared canvas, draw either here or on the microcontroller LCD display to see it appear on the other device:</p>
+        <!-- LCD: 272 * 480 -->
+        <canvas id="canvas" width="480" height="272">
+          Unfortunately, your browser doesn't support HTML canvas elements.
+        </canvas>
+        <div class="text-center"><button id="clear">Clear</button></div>
+      </section>
+
+      <footer>Created by <a href="https://github.com/pbrinkmeier">@pbrinkmeier</a>, <a href="https://github.com/lbrocke">@lbrocke</a> and <a href="https://github.com/jan-ellmers">@jan-ellmers</a></footer>
+    </main>
+    <script type="text/javascript">
+      let HOST = "http://192.168.1.42:80";
+
+      let CANVAS_WIDTH  = 480,
+          CANVAS_HEIGHT = 272;
+
+      function fetchGpioState() {
+        return fetch(HOST + "/pins", {
+          method: "GET", 
+          cache: "no-cache"
+        }).then(response => response.json());
+      }
+
+      function sendGpioUpdate(pin, state) {
+        fetch(HOST + "/pins/" + pin, {
+          method: "POST",
+          mode: "no-cors",
+          cache: "no-cache",
+          headers: {
+            "Content-Type": "text/plain; charset=utf-8",
+          },
+          body: state,
+        });
+      }
+
+      (function() {
+        /* -- Canvas logic -- */
+
+        let canvas = document.getElementById("canvas");
+        let ctx = canvas.getContext("2d");
+        let isDrawing = false,
+            lastX = 0,
+            lastY = 0;
+
+        document.getElementById("clear").addEventListener("click", clear);
+        clear();
+
+        ctx.strokeStyle = "rgb(0, 0, 0)";
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        ctx.lineWidth = 5;
+
+        function draw(e) {
+          let mouseX = parseInt(e.pageX - canvas.offsetLeft),
+              mouseY = parseInt(e.pageY - canvas.offsetTop);
+
+          if (isDrawing) {
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(mouseX, mouseY);
+            ctx.stroke();
+          }
+
+          [lastX, lastY] = [mouseX, mouseY];
+        }
+
+        function clear() {
+          ctx.fillStyle = "rgb(255, 255, 255)";
+          ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        }
+
+        canvas.addEventListener("mousedown", function(e) {
+          [lastX, lastY] = [
+            parseInt(e.clientX - canvas.offsetX),
+            parseInt(e.clientY - canvas.offsetY)
+          ];
+          isDrawing = true;
+        });
+        canvas.addEventListener("mousemove", draw);
+        canvas.addEventListener("mouseup", () => isDrawing = false);
+        canvas.addEventListener("mouseout", () => isDrawing = false);
+
+        /* -- GPIO pin logic -- */
+
+        // fetch current gpio states
+        fetchGpioState().then(json => {
+          Object.keys(json).forEach(key => {
+            let value = json[key];
+            document.querySelector('[name="'+key+'"]').checked = !!value;
+          });
+        });
+
+        for (elem of document.getElementsByClassName("gpio")) {
+          elem.addEventListener("change", function(e) {
+            sendGpioUpdate(this.name, (this.checked ? "1" : "0"));
+          }, false);
+        }
+      })();
+    </script>
+  </body>
 </html>
