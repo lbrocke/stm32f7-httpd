@@ -57,7 +57,8 @@ impl<F: FnMut(&Request, &Vec<u8>) -> Response> HTTPD<F> {
             let ip_addresses = [IpCidr::new(ip_addr, 24)];
 
             let tcp_receive_buffer = TcpSocketBuffer::new(vec![0; ethernet::MTU]);
-            let tcp_send_buffer = TcpSocketBuffer::new(vec![0; ethernet::MTU]);
+            // TODO: send packets in a loop, s/15000/MTU
+            let tcp_send_buffer = TcpSocketBuffer::new(vec![0; 15000]);
             let tcp_socket = TcpSocket::new(tcp_receive_buffer, tcp_send_buffer);
 
             // ARP cache of MAC address => IP address mappings

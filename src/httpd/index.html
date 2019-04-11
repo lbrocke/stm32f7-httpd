@@ -167,7 +167,6 @@
 
       function fetchGpioState() {
         return fetch(HOST + "/pins", {
-          method: "GET", 
           cache: "no-cache"
         }).then(response => response.json());
       }
@@ -195,7 +194,6 @@
         let sendBuffer = [];
 
         document.getElementById("clear").addEventListener("click", clear);
-        clear();
 
         function draw(e) {
           let mouseX = parseInt(e.pageX - canvas.offsetLeft),
@@ -283,15 +281,15 @@
             let value = json[key];
             document.querySelector('[name="'+key+'"]').checked = !!value;
           });
-        });
+        })
+        .then(clear)
+        .then(() => setInterval(pollCanvas, POLL_INTERVAL));
 
         for (elem of document.getElementsByClassName("gpio")) {
           elem.addEventListener("change", function(e) {
             sendGpioUpdate(this.name, (this.checked ? "1" : "0"));
           }, false);
         }
-
-        setInterval(pollCanvas, POLL_INTERVAL);
       })();
     </script>
   </body>

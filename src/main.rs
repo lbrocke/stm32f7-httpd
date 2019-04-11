@@ -98,7 +98,7 @@ fn main() -> ! {
     // set stdout to layer 2
     lcd::init_stdout(layer_2);
 
-    // logger::init().unwrap();
+    logger::init().unwrap();
 
     unsafe { ALLOCATOR.init(cortex_m_rt::heap_start() as usize, HEAP_SIZE) }
 
