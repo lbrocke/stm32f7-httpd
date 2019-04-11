@@ -162,9 +162,8 @@
     </main>
     <script type="text/javascript">
       let HOST = "http://192.168.1.42:80";
-
-      let CANVAS_WIDTH  = 480,
-          CANVAS_HEIGHT = 272;
+      let POLL_INTERVAL = 250;
+      let PIXEL_SIZE = 4;
 
       function fetchGpioState() {
         return fetch(HOST + "/pins", {
@@ -193,32 +192,76 @@
         let isDrawing = false,
             lastX = 0,
             lastY = 0;
+        let sendBuffer = [];
 
         document.getElementById("clear").addEventListener("click", clear);
         clear();
-
-        ctx.strokeStyle = "rgb(0, 0, 0)";
-        ctx.lineJoin = "round";
-        ctx.lineCap = "round";
-        ctx.lineWidth = 5;
 
         function draw(e) {
           let mouseX = parseInt(e.pageX - canvas.offsetLeft),
               mouseY = parseInt(e.pageY - canvas.offsetTop);
 
+          // the canvas is divided into virtual pixels consisting of 4x4 real LCD pixels
+          let x = ~~(mouseX / PIXEL_SIZE), // same as Math.floor()
+              y = ~~(mouseY / PIXEL_SIZE);
+
           if (isDrawing) {
-            ctx.beginPath();
-            ctx.moveTo(lastX, lastY);
-            ctx.lineTo(mouseX, mouseY);
-            ctx.stroke();
+            drawPixel(x, y);
+
+            if (sendBuffer.find((e) => e[0] == x && e[1] == y) === undefined)
+              sendBuffer.push([x, y]);
           }
 
           [lastX, lastY] = [mouseX, mouseY];
         }
 
+        function drawPixel(x, y) {
+            ctx.fillStyle = "rgb(0, 0, 0)";
+            ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+        }
+
         function clear() {
           ctx.fillStyle = "rgb(255, 255, 255)";
-          ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          fetch(HOST + "/pixels/clear", {
+            "method": "POST",
+            "mode": "no-cors"
+          });
+        }
+
+        function pollCanvas() {
+          let copy = sendBuffer;
+          sendBuffer = [];
+
+          // convert array into arraybuffer
+          let buffer = new ArrayBuffer(copy.length * 2);
+          let view = new DataView(buffer);
+
+          for (let i = 0; i < copy.length; i++) {
+            view.setUint8(2 * i, copy[i][0]);
+            view.setUint8(2 * i + 1, copy[i][1]);
+          }
+
+          // send request
+          let req = new XMLHttpRequest();
+          req.open("POST", HOST + "/pixels", true);
+          req.responseType = 'arraybuffer';
+          req.onload = function(e) {
+            // response contains pixels that have been set via touch on the
+            // LCD display
+            let arrayBuffer = req.response;
+            if (arrayBuffer) {
+              let byteArray = new Uint8Array(arrayBuffer);
+              for (let i = 0; i < byteArray.byteLength; i += 2) {
+                let x = byteArray[i];
+                let y = byteArray[i + 1];
+
+                drawPixel(x, y);
+              }
+            }
+          };
+
+          req.send(buffer);
         }
 
         canvas.addEventListener("mousedown", function(e) {
@@ -247,6 +290,8 @@
             sendGpioUpdate(this.name, (this.checked ? "1" : "0"));
           }, false);
         }
+
+        setInterval(pollCanvas, POLL_INTERVAL);
       })();
     </script>
   </body>
